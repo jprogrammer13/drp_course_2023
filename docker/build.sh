@@ -1,0 +1,1 @@
+docker build -t drp_agilex_limo:latest .
