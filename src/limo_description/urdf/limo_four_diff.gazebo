@@ -55,7 +55,7 @@
             <robotNamespace>$(arg robot_namespace)</robotNamespace>
         </plugin>
 
-        <plugin name="four_diff_controller" filename="libgazebo_ros_skid_steer_drive.so">
+        <!-- <plugin name="four_diff_controller" filename="libgazebo_ros_skid_steer_drive.so">
             <updateRate>100.0</updateRate>
             <robotNamespace>$(arg robot_namespace)</robotNamespace>
             <leftFrontJoint>front_left_wheel</leftFrontJoint>
@@ -73,6 +73,28 @@
             <covariance_x>0.000100</covariance_x>
             <covariance_y>0.000100</covariance_y>
             <covariance_yaw>0.010000</covariance_yaw>
-        </plugin>
+        </plugin> -->
+    <plugin name="four_diff_controller" filename="libgazebo_ros_diff_drive.so">
+
+      <update_rate>50</update_rate>
+      <left_joint>front_left_wheel</left_joint>
+      <right_joint>front_right_wheel</right_joint>
+      <wheel_separation>0.172</wheel_separation>
+      <wheel_diameter>0.09</wheel_diameter>
+      <max_wheel_torque>20</max_wheel_torque>
+      <max_wheel_acceleration>1.0</max_wheel_acceleration>
+      <command_topic>cmd_vel</command_topic>
+      <publish_odom>true</publish_odom>
+      <publish_odom_tf>true</publish_odom_tf>
+      <publish_wheel_tf>true</publish_wheel_tf>
+      <odometry_topic>odom</odometry_topic>
+      <odometry_frame>odom</odometry_frame>
+      <robot_base_frame>base_link</robot_base_frame>
+      <odometry_source>1</odometry_source>
+      <ros>
+        <remapping>odom:=/odometry</remapping>
+      </ros>
+    </plugin> 
+
     </gazebo>
 </robot>

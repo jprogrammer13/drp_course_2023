@@ -1,6 +1,10 @@
-FROM ros:noetic
+FROM ros:humble
 
 ARG DEBIAN_FRONTEND=noninteractive
+
+# setup entrypoint
+COPY ./ros_entrypoint.sh /
+RUN bash -c "chmod +x /ros_entrypoint.sh"
 
 RUN apt-get update
 RUN apt-get install sudo 
@@ -9,19 +13,23 @@ RUN apt-get install -qqy lsb-release gnupg2 curl -y
 ENV TZ=Europe/Rome
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
-# install ros package
-RUN apt-get update && apt-get install -y \
-    ros-${ROS_DISTRO}-roslint \
-    ros-${ROS_DISTRO}-xacro \
-    ros-${ROS_DISTRO}-ros-control \
-    ros-${ROS_DISTRO}-ros-controllers \
-    ros-${ROS_DISTRO}-rviz \
-    ros-${ROS_DISTRO}-gazebo-ros \
-    ros-${ROS_DISTRO}-gazebo-ros-control \
-    ros-${ROS_DISTRO}-robot-state-publisher \
-    ros-${ROS_DISTRO}-joint-state-publisher \
-    ros-${ROS_DISTRO}-joint-state-publisher-gui \
-    ros-${ROS_DISTRO}-rqt-robot-steering  \
-    ros-${ROS_DISTRO}-teleop-twist-keyboard
+# Install ROS2 packages
+RUN apt-get update && apt-get upgrade -y && \
+    apt-get install -y ros-humble-desktop && \
+    apt-get install -y python3-colcon-common-extensions && \
+    apt-get install -y libzmq3-dev && \
+    apt-get install -y libncurses5-dev && \
+    apt-get install -y mesa-utils libgl1-mesa-glx && \
+    apt-get install -y ros-humble-nav2-bringup && \
+    apt-get install -y ros-humble-cartographer && \
+    apt-get install -y ros-humble-cartographer-ros && \
+    apt-get install -y ros-humble-gazebo-ros && \
+    apt-get install -y ros-humble-gazebo-ros-pkgs && \
+    apt-get install -y ros-humble-test-msgs && \
+    apt-get install -y ros-humble-xacro && \
+    apt-get install -y ros-humble-joint-state-publisher-gui && \
+    apt-get install -y net-tools && \
+    apt-get install -y iproute2 
 
-RUN apt-get install -y nano tmux htop gedit
+ENTRYPOINT ["/ros_entrypoint.sh"]
+CMD ["bash"]
