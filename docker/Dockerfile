@@ -31,5 +31,7 @@ RUN apt-get update && apt-get upgrade -y && \
     apt-get install -y net-tools && \
     apt-get install -y iproute2 
 
+RUN apt-get install -y nano gedit tmux
+
 ENTRYPOINT ["/ros_entrypoint.sh"]
 CMD ["bash"]

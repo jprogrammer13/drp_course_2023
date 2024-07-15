@@ -1,2 +1,2 @@
 xhost +
-sudo docker run --rm -it --name drp_docker --network host --ulimit nofile=1024:524288  --gpus all --workdir="/root" --env="DISPLAY=$DISPLAY" -v /tmp/.X11-unix:/tmp/.X11-unix:rw -v ./src:/root/ros2_ws/src -v ./gazebo_models:/root/.gazebo/models --device /dev/dri:/dev/dri  -e "QT_X11_NO_MITSHM=1" drp_agilex_limo:latest /bin/bash
+sudo docker run --rm -it --name drp_docker --network host --ulimit nofile=1024:524288  --gpus all --workdir="/root" --env LIBGL_ALWAYS_INDIRECT=0 --env="DISPLAY=$DISPLAY" -v /tmp/.X11-unix:/tmp/.X11-unix:rw -v ./src:/root/ros2_ws/src -v ~/drp_home:/root --device /dev/dri:/dev/dri  -e "QT_X11_NO_MITSHM=1" drp_agilex_limo:latest /bin/bash
