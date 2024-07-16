@@ -8,17 +8,23 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import Command, LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
- 
+import launch_ros.descriptions
+
+import launch
+import launch.launch_description_sources
+import launch.substitutions
+import launch_ros
+import launch_ros.substitutions
  
 def generate_launch_description():
  
   # Constants for paths to different files and folders
   gazebo_models_path = 'models'
   package_name = 'limo_description'
-  robot_name_in_model = 'limo_description'
+  robot_name_in_model = 'limo'
   rviz_config_file_path = 'rviz/urdf.rviz'
-  urdf_file_path = 'urdf/limo_four_diff.xacro'
-  world_file_path = 'worlds/neighborhood.world'
+  urdf_file_path = 'urdf/limo_ackerman.xacro'
+  world_file_path = 'world/neighborhood.world'
  
   # Pose where we want to spawn the robot
   spawn_x_val = '0.0'
@@ -110,7 +116,9 @@ def generate_launch_description():
   start_robot_state_publisher_cmd = Node(
     package='robot_state_publisher',
     executable='robot_state_publisher',
-    parameters=[{'robot_description': Command(['xacro ', urdf_model]),'use_sim_time': use_sim_time}]
+    # parameters=[{'robot_description': Command(['xacro ', urdf_model]),'use_sim_time': use_sim_time}]
+    parameters=[{'robot_description': launch_ros.descriptions.ParameterValue( launch.substitutions.Command([
+      'xacro ',os.path.join(pkg_share,urdf_file_path)]), value_type=str)  }]
     )
  
   # Publish the joint states of the robot
@@ -129,7 +137,7 @@ def generate_launch_description():
     parameters=[{'use_sim_time': use_sim_time}])
   # start_dummy_sensors=Node(
   #   package='dummy_sensors', 
-  #   executable='dummy_joint_states', 
+  #   node_executable='dummy_joint_states', 
   #   output='screen')
 
   # Launch RViz
@@ -144,7 +152,8 @@ def generate_launch_description():
   start_gazebo_server_cmd = IncludeLaunchDescription(
     PythonLaunchDescriptionSource(os.path.join(pkg_gazebo_ros, 'launch', 'gzserver.launch.py')),
     condition=IfCondition(use_simulator),
-    launch_arguments={'world': world}.items())
+    # launch_arguments={'world': world}.items()
+    )
  
   # Start Gazebo client    
   start_gazebo_client_cmd = IncludeLaunchDescription(
@@ -163,6 +172,13 @@ def generate_launch_description():
                     '-Y', spawn_yaw_val],
                     output='screen')
  
+  controller = Node(
+        package="controller_manager",
+        executable="spawner",
+        arguments=["gazebo_ros_ackermann_drive"],
+    )
+
+
   # Create the launch description and populate
   ld = LaunchDescription()
  
@@ -177,14 +193,18 @@ def generate_launch_description():
   ld.add_action(declare_use_robot_state_pub_cmd)  
   ld.add_action(declare_use_rviz_cmd) 
   ld.add_action(declare_use_simulator_cmd)
-  ld.add_action(declare_world_cmd)
+  # ld.add_action(declare_world_cmd)
+ 
+  # ld.add_action(controller)
+
+
  
   # Add any actions
   ld.add_action(start_gazebo_server_cmd)
   ld.add_action(start_gazebo_client_cmd)
   ld.add_action(spawn_entity_cmd)
   ld.add_action(start_robot_state_publisher_cmd)
-  ld.add_action(start_joint_state_publisher_gui_node)
+  # ld.add_action(start_joint_state_publisher_gui_node)
   # ld.add_action(start_dummy_sensors)
   ld.add_action(start_rviz_cmd)
  
