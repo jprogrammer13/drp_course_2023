@@ -31,10 +31,44 @@ RUN apt-get install -y ros-humble-joint-state-publisher
 RUN apt-get install -y ros-humble-diff-drive-controller 
 RUN apt-get install -y ros-humble-control-* 
 RUN apt-get install -y ros-humble-teleop-twist-keyboard 
+RUN apt-get install -y ros-humble-rqt-robot-steering
 RUN apt-get install -y net-tools
 RUN apt-get install -y iproute2 
 
-RUN apt-get install -y nano gedit tmux
+RUN apt-get install -y nano gedit tmux htop
+
+RUN apt-get update \
+    && apt-get install -qq -y --no-install-recommends \
+    build-essential \
+    cmake \
+    git \
+    libssl-dev \
+    libusb-1.0-0-dev \
+    pkg-config \
+    libgtk-3-dev \
+    libglfw3-dev \
+    libgl1-mesa-dev \
+    libglu1-mesa-dev \    
+    curl \	
+    libusb-1.0-0 \
+    udev \
+    apt-transport-https \
+    ca-certificates \
+    curl \
+    swig \
+    software-properties-common \
+    python3-pip \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN git clone https://ghproxy.com/https://github.com/YDLIDAR/YDLidar-SDK.git &&\
+    mkdir -p YDLidar-SDK/build && \
+    cd YDLidar-SDK/build &&\
+    cmake ..&&\
+    make &&\
+    make install &&\
+    cd .. &&\
+    pip install . &&\
+    cd .. && rm -r YDLidar-SDK 
 
 ENTRYPOINT ["/ros_entrypoint.sh"]
 CMD ["bash"]
