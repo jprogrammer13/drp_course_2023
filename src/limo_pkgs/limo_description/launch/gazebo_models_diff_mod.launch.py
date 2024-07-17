@@ -16,7 +16,7 @@ def generate_launch_description():
     gazebo_models_path = 'models'
     package_name = 'limo_description'
     robot_name_in_model = 'limo_description'
-    rviz_config_file_path = '/rviz/urdf.rviz'
+    rviz_config_file_path = 'rviz/limo_rviz.rviz'
     urdf_file_path = 'urdf/limo_four_diff.xacro'
     world_file = 'empty.world'
 
