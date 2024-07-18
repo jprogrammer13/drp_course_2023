@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.5)
-project(limo_description)
+project(limo_gazebo)
 
 # Default to C99
 if(NOT CMAKE_C_STANDARD)
@@ -21,7 +21,7 @@ find_package(ament_cmake REQUIRED)
 # further dependencies manually.
 # find_package(<dependency> REQUIRED)
 install(
-  DIRECTORY launch  meshes rviz urdf worlds models
+  DIRECTORY launch worlds
   DESTINATION share/${PROJECT_NAME}
 )
 
