@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<robot name="limo_xacro" xmlns:xacro="http://ros.org/wiki/xacro">
+<robot name="limo" xmlns:xacro="http://ros.org/wiki/xacro">
     <xacro:macro name="limo_wheel" params="parent_prefix wheel_prefix reflect *joint_pose">
         <link name="${wheel_prefix}_wheel_link">
             <inertial>
@@ -97,13 +97,6 @@
             <child link="${frame_prefix}_link"/>
             <parent link="${parent_prefix}"/>
         </joint>
-        <link name="depth_link"></link>
-
-        <joint name="${frame_prefix}_to_camera_joint" type="fixed">
-            <origin xyz="0 0 0" rpy="${-M_PI/2} 0 ${-M_PI/2} "/>
-            <parent link="${frame_prefix}_link"/>
-            <child link="depth_link"/>
-          </joint>
 
         <gazebo reference="${frame_prefix}_link">
             <material>Gazebo/Yellow</material>
