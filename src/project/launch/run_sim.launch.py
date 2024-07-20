@@ -22,7 +22,7 @@ def generate_launch_description():
     # launch.logging.launch_config.level = logging.DEBUG
 
     limo_desc_pkg = get_package_share_directory('limo_description')
-    limo_gaze_pkg = get_package_share_directory('limo_gazebo')
+    gazebo_ros_pkg = get_package_share_directory('gazebo_ros')
 
     # General arguments
     use_sim_time = LaunchConfiguration('use_sim_time', default='true')
@@ -31,7 +31,7 @@ def generate_launch_description():
     # Gazebo simulation arguments
     use_gui = LaunchConfiguration('use_gui', default='true')
     gazebo_world_file = LaunchConfiguration('gazebo_world_file', default=os.path.join(
-        limo_gaze_pkg, 'worlds', 'empty.world'))
+        limo_desc_pkg, 'worlds', 'empty.world'))
 
     # Declare LaunchArguments for exposing launching arguments
     launch_args = [
@@ -60,27 +60,30 @@ def generate_launch_description():
             description='World used in the gazebo simulation'
         ),
 
-    ]
-
-    gazebo_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource([
-            os.path.join(limo_gaze_pkg, 'launch'),
-            '/robot.launch.py']
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(
+                os.path.join(gazebo_ros_pkg, 'launch', 'gzserver.launch.py')
+            ),
+            launch_arguments={
+                'world': gazebo_world_file,
+                'verbose': 'true'
+            }.items(),
         ),
-        launch_arguments={
-            'use_sim_time': use_sim_time,
-            'spawn_limo': 'false',
-            'use_gui': use_gui,
-            'gazebo_world_file': gazebo_world_file
-        }.items()
-    )
+
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(
+                os.path.join(gazebo_ros_pkg, 'launch', 'gzclient.launch.py')
+            ),
+            launch_arguments={
+                'verbose': 'true'
+            }.items()
+        ),
+
+    ]
 
     def launch_rsp(context):
         nodes = []
         for robot_id in range(int(context.launch_configurations['n_robot'])):
-
-            robot_name = PythonExpression(
-                ["'", "limo", str(robot_id), "'"])
 
             rsp_node = IncludeLaunchDescription(
                 PythonLaunchDescriptionSource([
@@ -88,7 +91,6 @@ def generate_launch_description():
                     '/rsp.launch.py']
                 ),
                 launch_arguments={
-                    'use_sim_time': use_sim_time,
                     'robot_id': str(robot_id),
                 }.items()
             )
@@ -128,8 +130,6 @@ def generate_launch_description():
 
     for launch_arg in launch_args:
         ld.add_action(launch_arg)
-
-    ld.add_action(gazebo_launch)
 
     ld.add_action(OpaqueFunction(function=launch_rsp))
     ld.add_action(OpaqueFunction(function=spawn_robot))

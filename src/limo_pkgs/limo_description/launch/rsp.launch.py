@@ -14,7 +14,6 @@ from launch.actions import OpaqueFunction
 
 
 def generate_launch_description():
-    use_sim_time = LaunchConfiguration('use_sim_time', default='true')
     robot_id = LaunchConfiguration('robot_id', default='')
 
     robot_name = PythonExpression(["'", 'limo', robot_id, "'"])
@@ -42,9 +41,10 @@ def generate_launch_description():
             executable='joint_state_publisher',
             name='joint_state_publisher',
             namespace=robot_name,
+            output='screen',
             parameters=[{'frame_prefix': frame_prefix,
                          'robot_description': robot_desc,
-                         'use_sim_time' : True}],
+                         'use_sim_time': True}],
         ),
 
         Node(
@@ -52,8 +52,9 @@ def generate_launch_description():
             executable='robot_state_publisher',
             name='robot_state_publisher',
             namespace=robot_name,
+            output='screen',
             parameters=[{'frame_prefix': frame_prefix,
                          'robot_description': robot_desc,
-                         'use_sim_time' : True}],
+                         'use_sim_time': True}],
         )
     ])
