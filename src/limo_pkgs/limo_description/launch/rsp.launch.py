@@ -12,14 +12,6 @@ from launch import LaunchDescription
 from launch_ros.actions import Node
 from launch.actions import OpaqueFunction
 
-
-def print_env(context):
-    print(__file__)
-    for key in context.launch_configurations.keys():
-        print("\t", key, context.launch_configurations[key])
-    return
-
-
 def generate_launch_description():
     use_sim_time = LaunchConfiguration('use_sim_time', default='false')
     robot_id = LaunchConfiguration('robot_id', default='')
@@ -42,8 +34,6 @@ def generate_launch_description():
             'robot_id',
             default_value='',
             description='Robot ID'),
-
-        OpaqueFunction(function=print_env),
 
         Node(
             package='joint_state_publisher',

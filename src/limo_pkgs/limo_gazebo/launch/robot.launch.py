@@ -17,26 +17,6 @@ import logging
 import launch.logging
 
 
-def print_env(context):
-    print(__file__)
-    for key in context.launch_configurations.keys():
-        print("\t", key, context.launch_configurations[key])
-    return
-
-
-def check_exists(context):
-    if not os.path.exists(context.launch_configurations['gazebo_world_file']):
-        raise Exception("[{}] Gazebo world file `{}` does not exist".format(
-            __file__, context.launch_configurations['gazebo_world_file']))
-
-    if context.launch_configurations['use_rviz'] == "true" and \
-            not os.path.exists(context.launch_configurations['rviz_config_file']):
-        raise Exception("[{}] Rviz configuration `{}` does not exist".format(
-            __file__, context.launch_configurations['rviz_config_file']))
-
-    return
-
-
 def generate_launch_description():
     # launch.logging.launch_config.level = logging.DEBUG
 
@@ -47,12 +27,7 @@ def generate_launch_description():
     use_sim_time = LaunchConfiguration('use_sim_time', default='true')
     robot_id = LaunchConfiguration('robot_id', default='')
     use_gui = LaunchConfiguration('use_gui', default='true')
-    use_rviz = LaunchConfiguration('use_rviz', default='true')
     spawn_limo = LaunchConfiguration('spawn_limo', default='true')
-    rviz_config_file = LaunchConfiguration('rviz_config_file',
-                                           default=PythonExpression(
-                                               ["'", os.path.join(limo_desc_pkg, 'rviz', 'limo'), robot_id, ".rviz'"])
-                                           )
     gazebo_world_file = LaunchConfiguration('gazebo_world_file',
                                             default=os.path.join(
                                                 limo_gaze_pkg, 'worlds', 'empty.world')
@@ -62,30 +37,6 @@ def generate_launch_description():
 
     # TODO move models to limo_gazebo
     os.environ["GAZEBO_MODEL_PATH"] = os.path.join(limo_desc_pkg, 'models')
-
-    def evaluate_rviz(context, *args, **kwargs):
-        """
-        Replace shelfinoX with the robot name in the rviz configuration file and 
-        sets the rviz_config_file to the new file
-        """
-        if context.launch_configurations['use_rviz'] == 'true':
-            rn = 'limo' + context.launch_configurations['robot_id']
-            rviz_path = context.launch_configurations['rviz_config_file']
-            cr_path = os.path.join(limo_desc_pkg, 'rviz', 'limo') + \
-                context.launch_configurations['robot_id'] + '.rviz'
-
-            print("[{}] Replacing limoX with {} from file {} to file {}".format(
-                __file__, rn, rviz_path, cr_path))
-
-            with open(rviz_path, 'r') as f_in:
-                filedata = f_in.read()
-                newdata = filedata.replace("limoX", rn)
-                with open(cr_path, 'w+') as f_out:
-                    f_out.write(newdata)
-
-            context.launch_configurations['rviz_config_file'] = cr_path
-
-        return
 
     return LaunchDescription([
         DeclareLaunchArgument(
@@ -105,31 +56,16 @@ def generate_launch_description():
             description='Flag to enable gazebo visualization'
         ),
         DeclareLaunchArgument(
-            name='use_rviz',
-            default_value=use_rviz,
-            choices=['true', 'false'],
-            description='Flag to enable rviz visualization'
-        ),
-        DeclareLaunchArgument(
             name='spawn_limo',
             default_value=spawn_limo,
             choices=['true', 'false'],
             description='Flag to enable spawning of the robot'
         ),
         DeclareLaunchArgument(
-            name='rviz_config_file',
-            default_value=rviz_config_file,
-            description='Path to the rviz configuration file, used only if use_rviz=true'
-        ),
-        DeclareLaunchArgument(
             name='gazebo_world_file',
             default_value=gazebo_world_file,
             description='World used in the gazebo simulation'
         ),
-
-        OpaqueFunction(function=print_env),
-        OpaqueFunction(function=check_exists),
-        OpaqueFunction(function=evaluate_rviz),
 
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
@@ -158,14 +94,7 @@ def generate_launch_description():
                 '-topic', PythonExpression(["'/", robot_name,
                                            "/robot_description", "'"]),
                 '-entity', robot_name,
-                '-robot_namespace', robot_name],
-            # condition=IfCondition(spawn_limo),
-        ),
+                '-robot_namespace', robot_name]
+        )
 
-        Node(
-            package='rviz2',
-            executable='rviz2',
-            arguments=['-d', rviz_config_file],
-            # condition=IfCondition(use_rviz),
-        ),
     ])
