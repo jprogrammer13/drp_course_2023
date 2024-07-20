@@ -12,11 +12,13 @@ from launch import LaunchDescription
 from launch_ros.actions import Node
 from launch.actions import OpaqueFunction
 
+
 def generate_launch_description():
-    use_sim_time = LaunchConfiguration('use_sim_time', default='false')
+    use_sim_time = LaunchConfiguration('use_sim_time', default='true')
     robot_id = LaunchConfiguration('robot_id', default='')
 
     robot_name = PythonExpression(["'", 'limo', robot_id, "'"])
+    frame_prefix = PythonExpression(["'", 'limo', robot_id, "/'"])
 
     xacro_model = os.path.join(
         get_package_share_directory('limo_description'),
@@ -27,7 +29,7 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument(
             'use_sim_time',
-            default_value='false',
+            default_value='true',
             description='Use simulation (Gazebo) clock if true'),
 
         DeclareLaunchArgument(
@@ -36,10 +38,22 @@ def generate_launch_description():
             description='Robot ID'),
 
         Node(
+            package='joint_state_publisher',
+            executable='joint_state_publisher',
+            name='joint_state_publisher',
+            namespace=robot_name,
+            parameters=[{'frame_prefix': frame_prefix,
+                         'robot_description': robot_desc,
+                         'use_sim_time' : True}],
+        ),
+
+        Node(
             package='robot_state_publisher',
             executable='robot_state_publisher',
             name='robot_state_publisher',
             namespace=robot_name,
-            parameters=[{'robot_description': robot_desc}],
+            parameters=[{'frame_prefix': frame_prefix,
+                         'robot_description': robot_desc,
+                         'use_sim_time' : True}],
         )
     ])
