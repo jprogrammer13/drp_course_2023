@@ -24,6 +24,7 @@ def generate_launch_description():
     limo_desc_pkg = get_package_share_directory('limo_description')
     limo_nav2_pkg = get_package_share_directory('limo_navigation')
     gazebo_ros_pkg = get_package_share_directory('gazebo_ros')
+    project_pkg = os.path.join(get_package_share_directory('project'))
 
     nav2_params_file_path = os.path.join(
         limo_nav2_pkg, 'config', 'limo.yaml')
@@ -31,6 +32,8 @@ def generate_launch_description():
     # General arguments
     use_sim_time = LaunchConfiguration('use_sim_time', default='true')
     n_robot = LaunchConfiguration('n_robot', default='4')
+    rviz_config_file = LaunchConfiguration(
+        'rviz_config_file', default=os.path.join(project_pkg, 'rviz', 'limo.rviz'))
 
     # Gazebo simulation arguments
     use_gui = LaunchConfiguration('use_gui', default='true')
@@ -98,6 +101,11 @@ def generate_launch_description():
             default_value=nav2_rviz_config_file,
             description='Full path to the nav2 rviz config file to use'
         ),
+        DeclareLaunchArgument(
+            name='rviz_config_file',
+            default_value=rviz_config_file,
+            description='Full path to the RVIZ config file to use'
+        ),
 
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
@@ -106,6 +114,16 @@ def generate_launch_description():
             launch_arguments={
                 'verbose': 'true'
             }.items()
+        ),
+
+        Node(
+            package='rviz2',
+            executable='rviz2',
+            arguments=['-d', rviz_config_file],
+            parameters=[
+                {'use_sim_time': use_sim_time}
+            ],
+            output='screen'
         ),
 
     ]

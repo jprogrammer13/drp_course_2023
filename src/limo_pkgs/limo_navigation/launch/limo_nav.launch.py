@@ -19,19 +19,6 @@ def print_env(context):
         print("\t", key, context.launch_configurations[key])
     return
 
-def check_exists(context):
-    if not os.path.exists(context.launch_configurations['map_file']):
-        raise Exception("[{}] Map file `{}` does not exist".format(__file__, context.launch_configurations['map_file']))
-    
-    if not os.path.exists(context.launch_configurations['nav2_params_file']):
-        raise Exception("[{}] Nav2 parameters file `{}` does not exist".format(__file__, context.launch_configurations['nav2_params_file']))
-    
-    if context.launch_configurations['headless'] == "false" and \
-        not os.path.exists(context.launch_configurations['rviz_config_file']):
-        raise Exception("[{}] Rviz configuration `{}` does not exist".format(__file__, context.launch_configurations['rviz_config_file']))
-
-    return
-
 def generate_launch_description():
     limo_nav2_pkg = os.path.join(get_package_share_directory('limo_navigation'))
 
@@ -39,7 +26,6 @@ def generate_launch_description():
     robot_id         = LaunchConfiguration('robot_id', default='G')
     map_file         = LaunchConfiguration('map_file', default=os.path.join(limo_nav2_pkg, 'map', 'hexagon.yaml'))
     nav2_params_file = LaunchConfiguration('nav2_params_file', default=os.path.join(limo_nav2_pkg,'config', 'limo.yaml'))
-    rviz_config_file = LaunchConfiguration('rviz_config_file', default=os.path.join(limo_nav2_pkg, 'rviz', 'limo_nav.rviz'))
     nav2_autostart   = LaunchConfiguration('nav2_autostart', default='true')
 
     remote_nav       = LaunchConfiguration('remote_nav', default='false')
@@ -97,21 +83,6 @@ def generate_launch_description():
         convert_types=True
     )
 
-    def evaluate_rviz(context, *args, **kwargs):
-        rn = 'limo' + LaunchConfiguration('robot_id').perform(context)
-        rviz_path = context.launch_configurations['rviz_config_file']
-        cr_path = os.path.join(limo_nav2_pkg, 'rviz', 'limo') + context.launch_configurations['robot_id'] + '_nav.rviz'
-        
-        with open(rviz_path,'r') as f_in:
-            filedata = f_in.read()
-            newdata = filedata.replace("limoX", rn)
-            with open(cr_path,'w+') as f_out:
-                f_out.write(newdata)
-
-        context.launch_configurations['rviz_config_file'] = cr_path
-        
-        return
-
     return LaunchDescription([        
         DeclareLaunchArgument(
             name='use_sim_time', 
@@ -134,11 +105,6 @@ def generate_launch_description():
             name='nav2_params_file',
             default_value=nav2_params_file,
             description='Full path to the ROS2 parameters file to use for all launched nodes'
-        ),
-        DeclareLaunchArgument(
-            name='rviz_config_file',
-            default_value=rviz_config_file,
-            description='Full path to the RVIZ config file to use'
         ),
         DeclareLaunchArgument(
             name='nav2_autostart',
@@ -175,8 +141,6 @@ def generate_launch_description():
         ),
         
         OpaqueFunction(function=print_env),
-        OpaqueFunction(function=check_exists),
-        OpaqueFunction(function=evaluate_rviz),
 
         Node(
             package='nav2_map_server',
@@ -305,19 +269,7 @@ def generate_launch_description():
                 {'node_names': lifecycle_nodes_nav}
             ],
             condition=UnlessCondition(remote_nav),
-        ),
-
-        Node(
-            package='rviz2',
-            executable='rviz2',
-            namespace= robot_name,
-            arguments=['-d', rviz_config_file],
-            parameters=[
-                {'use_sim_time': use_sim_time}
-            ],
-            condition=UnlessCondition(headless),
-            output='screen'
-        ),
+        )
     ])
 
     
