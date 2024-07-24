@@ -22,7 +22,11 @@ def generate_launch_description():
     # launch.logging.launch_config.level = logging.DEBUG
 
     limo_desc_pkg = get_package_share_directory('limo_description')
+    limo_nav2_pkg = get_package_share_directory('limo_navigation')
     gazebo_ros_pkg = get_package_share_directory('gazebo_ros')
+
+    nav2_params_file_path = os.path.join(
+        limo_nav2_pkg, 'config', 'limo.yaml')
 
     # General arguments
     use_sim_time = LaunchConfiguration('use_sim_time', default='true')
@@ -32,6 +36,14 @@ def generate_launch_description():
     use_gui = LaunchConfiguration('use_gui', default='true')
     gazebo_world_file = LaunchConfiguration('gazebo_world_file', default=os.path.join(
         limo_desc_pkg, 'worlds', 'empty.world'))
+
+    # Navigation arguments
+    map_file = LaunchConfiguration('map_file', default=os.path.join(
+        limo_nav2_pkg, 'maps', 'hexagon.yaml'))
+    nav2_params_file = LaunchConfiguration(
+        'nav2_params_file', default=nav2_params_file_path)
+    nav2_rviz_config_file = LaunchConfiguration('nav2_rviz_config_file', default=os.path.join(
+        limo_nav2_pkg, 'rviz', 'limo_nav.rviz'))
 
     # Declare LaunchArguments for exposing launching arguments
     launch_args = [
@@ -68,6 +80,23 @@ def generate_launch_description():
                 'world': gazebo_world_file,
                 'verbose': 'true'
             }.items(),
+        ),
+
+        # Navigation arguments
+        DeclareLaunchArgument(
+            'map_file',
+            default_value=map_file,
+            description='Full path to map file to load'
+        ),
+        DeclareLaunchArgument(
+            'nav2_params_file',
+            default_value=nav2_params_file_path,
+            description='Full path to the nav2 params file to use'
+        ),
+        DeclareLaunchArgument(
+            'nav2_rviz_config_file',
+            default_value=nav2_rviz_config_file,
+            description='Full path to the nav2 rviz config file to use'
         ),
 
         IncludeLaunchDescription(
@@ -125,6 +154,33 @@ def generate_launch_description():
 
         return nodes
 
+    def launch_navigation(context):
+        nodes = []
+        for robot_id in range(int(context.launch_configurations['n_robot'])):
+
+            sapf_node = GroupAction([
+                IncludeLaunchDescription(
+                    PythonLaunchDescriptionSource([
+                        os.path.join(limo_nav2_pkg, 'launch'),
+                        '/limo_nav.launch.py']
+                    ),
+                    launch_arguments={
+                        'use_sim_time': use_sim_time,
+                        'robot_id': str(robot_id),
+                        'map_file': map_file,
+                        'nav2_params_file': nav2_params_file,
+                        'rviz_config_file': nav2_rviz_config_file,
+                        'initial_x': str(robot_id*2.0-2.0),
+                        'initial_y': str(robot_id*2.0-2.0),
+                        'headless': 'true',
+                    }.items()
+                ),
+            ])
+
+            nodes.append(sapf_node)
+
+        return nodes
+
     # LaunchDescription with the additional launch files
     ld = LaunchDescription()
 
@@ -133,5 +189,10 @@ def generate_launch_description():
 
     ld.add_action(OpaqueFunction(function=launch_rsp))
     ld.add_action(OpaqueFunction(function=spawn_robot))
+
+    ld.add_action(TimerAction(
+        period='5',
+        actions=[OpaqueFunction(function=launch_navigation)]
+    ))
 
     return ld
