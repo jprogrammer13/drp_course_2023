@@ -1,2 +1,0 @@
-xhost +
-sudo docker run --rm -it --name drp_docker --privileged --runtime nvidia -e LIBGL_ALWAYS_SOFTWARE="1" --network host --ulimit nofile=1024:524288  --gpus all --workdir="/root" --env="DISPLAY=$DISPLAY" -v /tmp/.X11-unix:/tmp/.X11-unix:rw -v ~/drp_home:/root -v ./src:/root/ros2_ws/src --device /dev/dri:/dev/dri  -e "QT_X11_NO_MITSHM=1" drp_agilex_limo:latest /bin/bash
