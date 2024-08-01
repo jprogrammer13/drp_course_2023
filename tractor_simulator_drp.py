@@ -45,6 +45,8 @@ from std_srvs.srv import Empty
 import rospkg
 import rosgraph
 
+import xml.etree.ElementTree as ET
+
 import sys
 import os
 import params as conf
@@ -56,9 +58,6 @@ import rospy as ros
 from base_controllers.utils.math_tools import *
 np.set_printoptions(threshold=np.inf, precision=5,
                     linewidth=1000, suppress=True)
-
-
-robotName = "tractor"  # needs to inherit BaseController
 
 
 class GenericSimulator(BaseController):
@@ -196,12 +195,24 @@ class GenericSimulator(BaseController):
             self.radius_log[self.log_counter] = self.radius
         super().logData()
 
+    def changeRobotNamespace(self,  xml, robot_name="tractor"):
+        root = ET.fromstring(xml)
+        print(root)
+
+        # change namespace
+        for robot_namespace in root.findall(".//robotNamespace"):
+            print("ciao",robot_namespace.text)
+            robot_namespace.text = robot_name
+        
+        return ET.tostring(root, encoding="unicode")
+
     def getRobotModelFloating(self, robot_name="hyq"):
             ERROR_MSG = 'You should set the environment variable LOCOSIM_DIR"\n'
             path = os.environ.get('LOCOSIM_DIR', ERROR_MSG)
             if rosgraph.is_master_online():
                 try:
                     urdf = ros.get_param('/robot_description')
+                    urdf = self.changeRobotNamespace(urdf, robot_name)
                     print("URDF generated_commons")
                     os.makedirs(path + "/robot_urdf/generated_urdf/", exist_ok=True)
                     urdf_location = path + "/robot_urdf/generated_urdf/" + robot_name+ ".urdf"
@@ -235,12 +246,6 @@ class GenericSimulator(BaseController):
 
     def loadModelAndPublishers(self, xacro_path=None):
         
-        self.robot = self.getRobotModelFloating(self.robot_name)
-        if xacro_path is None:
-            xacro_path = rospkg.RosPack().get_path(
-                self.robot_name[:-1] + '_description') + '/robots/' + self.robot_name + '.urdf.xacro'
-        else:
-            print("loading custom xacro path: ", xacro_path)
         self.robot = self.getRobotModelFloating(self.robot_name)
 
         # instantiating objects
@@ -683,7 +688,7 @@ class GenericSimulator(BaseController):
         # publish TF for rviz
         self.broadcaster.sendTransform(self.u.linPart(self.basePoseW),
                                        self.quaternion,
-                                       ros.Time.now(), '/base_link', '/world')
+                                       ros.Time.now(), f'{robotName}/base_link', '/world')
         # this is to publish on the topic groundtruth if somebody needs it
         self.pub_odom_msg(self.groundtruth_pub)
         self.q = q_des.copy()
@@ -757,13 +762,10 @@ def talker(p, p1):
         p.send_des_jstate(p.q_des, p.qd_des, p.tau_ffwd)
         p1.send_des_jstate(p1.q_des, p1.qd_des, p1.tau_ffwd)
 
-        # p.ros_pub.publishVisual(delete_markers=False)
-        # p1.ros_pub.publishVisual(delete_markers=False)
-
 
 if __name__ == '__main__':
-    p = GenericSimulator(robotName+"0")
-    p1 = GenericSimulator(robotName+"1")
+    p = GenericSimulator("tracotr0")
+    p1 = GenericSimulator("tractor1")
     try:
         talker(p, p1)
     except (ros.ROSInterruptException, ros.service.ServiceException):
