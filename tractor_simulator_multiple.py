@@ -39,8 +39,6 @@ class GenericSimulator(BaseController):
     def __init__(self, robot_name="tractor"):
         super().__init__(robot_name=robot_name, external_conf = conf)
         print("Initialized tractor multiple controller---------------------------------------------------------------")
-
-
         self.ControlType = 'OPEN_LOOP' #'OPEN_LOOP' 'CLOSED_LOOP_UNICYCLE' 'CLOSED_LOOP_SLIP_0' 'CLOSED_LOOP_SLIP'
         self.SAVE_BAGS = False
         self.LONG_SLIP_COMPENSATION = 'NONE'#'NN', 'EXP', 'NONE'
@@ -160,12 +158,12 @@ class GenericSimulator(BaseController):
                 self.log_counter += 1
 
     def startSimulator(self):
-        os.system("killall rosmaster rviz gzserver coppeliaSim")
+
         # launch roscore
         checkRosMaster()
         ros.sleep(1.5)
         # run robot state publisher + load robot description + rviz
-        launchFileGeneric(rospkg.RosPack().get_path('tractor_description') + "/launch/multiple_robots.launch")
+        #launchFileGeneric(rospkg.RosPack().get_path('tractor_description') + "/launch/multiple_robots.launch")
         groundParams = Ground()
         self.tracked_vehicle_simulator = TrackedVehicleSimulator(dt=conf.robot_params[p.robot_name]['dt'], ground=groundParams)
         self.tracked_vehicle_simulator.initSimulation(vbody_init=np.array([0,0,0.0]),
@@ -182,9 +180,6 @@ class GenericSimulator(BaseController):
         self.ros_pub = RosPub(self.robot_name, only_visual=True)
         self.pub_des_jstate = ros.Publisher("/command", JointState, queue_size=1, tcp_nodelay=True)
 
-        if self.SAVE_BAGS:
-            bag_name = f"{p.ControlType}_Long_{self.LONG_SLIP_COMPENSATION}.bag"
-            self.recorder = RosbagControlledRecorder(bag_name=bag_name)
 
     def get_command_vel(self, msg):
         self.v_d = msg.linear.x
@@ -473,6 +468,7 @@ class GenericSimulator(BaseController):
 
         self.quaternion = pin.Quaternion(pin.rpy.rpyToMatrix(self.euler))
         self.b_R_w = self.math_utils.rpyToRot(self.euler)
+
         #publish TF for rviz TODO it is very slow, consider using tf2_ros instead of tf
         self.broadcaster.sendTransform(self.u.linPart(self.basePoseW),
                                        self.quaternion,
@@ -502,25 +498,25 @@ class GenericSimulator(BaseController):
         msg.twist.twist.angular.z = self.baseTwistW[self.u.sp_crd["AZ"]]
         odom_publisher.publish(msg)
 
-def talker(p):
+def talker(p, p1):
+    launchFileGeneric(rospkg.RosPack().get_path(
+            'tractor_description') + "/launch/multiple_robots.launch")
+
     p.start()
     p.startSimulator()
     p.initVars()
-    p.q_old = np.zeros(2)
     p.startupProcedure()
 
-    #init joints
-    p.q_des = np.copy(p.q_des_q0)
-    p.q_old = np.zeros(2)
+    # TODO
+    # p1.start()
+    # p1.startSimulator()
+    # p1.initVars()
+    # p1.startupProcedure()
+
     robot_state = Robot()
-    ros.sleep(1.)
-    #
-    p.q_des = np.zeros(2)
-    p.qd_des = np.zeros(2)
-    p.tau_ffwd = np.zeros(2)
-
-
     if p.SAVE_BAGS:
+        bag_name = f"{p.ControlType}_Long_{p.LONG_SLIP_COMPENSATION}.bag"
+        p.recorder = RosbagControlledRecorder(bag_name=bag_name)
         p.recorder.start_recording_srv()
     # OPEN loop control
     if p.ControlType == 'OPEN_LOOP':
@@ -547,8 +543,11 @@ def talker(p):
             #note there is only a ros_impedance controller, not a joint_group_vel controller, so I can only set velocity by integrating the wheel speed and
             #senting it to be tracked from the impedance loop
             p.send_des_jstate(p.q_des, p.qd_des, p.tau_ffwd)
-            p.ros_pub.publishVisual(delete_markers=False)
+            #TODO
+            #p1.send_des_jstate(p1.q_des, p1.qd_des, p1.tau_ffwd)
 
+
+            p.ros_pub.publishVisual(delete_markers=False)
             p.beta_l, p.beta_r, p.alpha = p.estimateSlippages(p.baseTwistW, p.basePoseW[p.u.sp_crd["AZ"]], p.qd)
 
             # log variables
@@ -611,6 +610,9 @@ def talker(p):
             p.q_des = p.q_des + p.qd_des * conf.robot_params[p.robot_name]['dt']
 
             p.send_des_jstate(p.q_des, p.qd_des, p.tau_ffwd)
+            # TODO
+            # p1.send_des_jstate(p1.q_des, p1.qd_des, p1.tau_ffwd)
+
             p.ros_pub.publishVisual(delete_markers=False)
 
             p.beta_l, p.beta_r, p.alpha = p.estimateSlippages(p.baseTwistW,p.basePoseW[p.u.sp_crd["AZ"]], p.qd)
@@ -623,9 +625,10 @@ def talker(p):
         p.recorder.stop_recording_srv()
 
 if __name__ == '__main__':
-    p = GenericSimulator(robotName)
+    p = GenericSimulator("tractor")
+    p1 = GenericSimulator("tractor1")
     try:
-        talker(p)
+        talker(p, p1)
     except (ros.ROSInterruptException, ros.service.ServiceException):
         pass
     if p.SAVE_BAGS:
