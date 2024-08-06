@@ -38,26 +38,43 @@ class GenericSimulator(BaseController):
     
     def __init__(self, robot_name="tractor"):
         super().__init__(robot_name=robot_name, external_conf = conf)
-
         print("Initialized tractor multiple controller---------------------------------------------------------------")
 
-        # initial pose
-        self.p0 = np.array([0, 0.05, 0.1])
+
         self.ControlType = 'OPEN_LOOP' #'OPEN_LOOP' 'CLOSED_LOOP_UNICYCLE' 'CLOSED_LOOP_SLIP_0' 'CLOSED_LOOP_SLIP'
         self.SAVE_BAGS = False
         self.LONG_SLIP_COMPENSATION = 'NONE'#'NN', 'EXP', 'NONE'
 
     def initVars(self):
-        super().initVars()
+        self.basePoseW = np.zeros(6)
+        self.baseTwistW = np.zeros(6)
+        self.comPoseW = np.zeros(6)
+        self.comTwistsW = np.zeros(6)
+        self.q = np.zeros(2)
+        self.qd = np.zeros(2)
+        self.tau = np.zeros(2)
+        self.q_des = np.zeros(2)
+        self.quaternion = np.array([0., 0., 0., 1.])  # fundamental otherwise receivepose gets stuck
+        self.q_des = conf.robot_params[self.robot_name]['q_0']
+        self.qd_des = np.zeros(2)
+        self.tau_ffwd = np.zeros(2)
+        self.b_R_w = np.eye(3)
+        self.time = np.zeros(1)
+        self.log_counter = 0
 
-        # regressor
-        self.model = cb.CatBoostRegressor()
-        # laod model
-        try:
-            self.model_beta_l.load_model(os.environ['LOCOSIM_DIR']+'/robot_control/base_controllers/tracked_robot/controllers/regressor/model_beta_l.cb')
-            self.model_beta_r.load_model(os.environ['LOCOSIM_DIR'] + '/robot_control/base_controllers/tracked_robot/controllers/regressor/model_beta_r.cb')
-        except:
-            print(colored("need to generate the models with running tracked_robot/controller/regressor/model_slippage_updated.py"))
+        # log vars
+        self.basePoseW_log = np.full((6, conf.robot_params[self.robot_name]['buffer_size']), np.nan)
+        self.baseTwistW_log = np.full((6, conf.robot_params[self.robot_name]['buffer_size']), np.nan)
+        self.comPoseW_log = np.full((6, conf.robot_params[self.robot_name]['buffer_size']), np.nan)
+        self.comTwistW_log = np.full((6, conf.robot_params[self.robot_name]['buffer_size']), np.nan)
+        self.q_des_log = np.full((2, conf.robot_params[self.robot_name]['buffer_size']), np.nan)
+        self.q_log = np.full((2, conf.robot_params[self.robot_name]['buffer_size']), np.nan)
+        self.qd_des_log = np.full((2, conf.robot_params[self.robot_name]['buffer_size']), np.nan)
+        self.qd_log = np.full((2, conf.robot_params[self.robot_name]['buffer_size']), np.nan)
+        self.tau_ffwd_log = np.full((2, conf.robot_params[self.robot_name]['buffer_size']), np.nan)
+        self.tau_log = np.full((2, conf.robot_params[self.robot_name]['buffer_size']), np.nan)
+        self.time_log = np.full((conf.robot_params[self.robot_name]['buffer_size']), np.nan)
+
         ## add your variables to initialize here
         self.ctrl_v = 0.
         self.ctrl_omega = 0.0
@@ -66,7 +83,7 @@ class GenericSimulator(BaseController):
         self.V= 0.
         self.V_dot = 0.
 
-        self.q_des_q0 = np.zeros(self.robot.na)
+        self.q_des_q0 = np.zeros(2)
         self.ctrl_v_log = np.empty((conf.robot_params[self.robot_name]['buffer_size']))* nan
         self.ctrl_omega_log = np.empty((conf.robot_params[self.robot_name]['buffer_size']))* nan
         self.v_d_log = np.empty((conf.robot_params[self.robot_name]['buffer_size']))* nan
@@ -94,6 +111,18 @@ class GenericSimulator(BaseController):
         self.beta_l_control_log = np.empty((conf.robot_params[self.robot_name]['buffer_size'])) * nan
         self.beta_r_control_log = np.empty((conf.robot_params[self.robot_name]['buffer_size'])) * nan
 
+        # regressor
+        self.model = cb.CatBoostRegressor()
+        # laod model
+        try:
+            self.model_beta_l.load_model(os.environ[
+                                             'LOCOSIM_DIR'] + '/robot_control/base_controllers/tracked_robot/controllers/regressor/model_beta_l.cb')
+            self.model_beta_r.load_model(os.environ[
+                                             'LOCOSIM_DIR'] + '/robot_control/base_controllers/tracked_robot/controllers/regressor/model_beta_r.cb')
+        except:
+            print(colored(
+                "need to generate the models with running tracked_robot/controller/regressor/model_slippage_updated.py"))
+
     def logData(self):
             if (self.log_counter<conf.robot_params[self.robot_name]['buffer_size'] ):
                 ## add your logs here
@@ -118,7 +147,17 @@ class GenericSimulator(BaseController):
                 self.beta_l_control_log[self.log_counter] = self.beta_l_control
                 self.beta_r_control_log[self.log_counter] = self.beta_r_control
                 self.radius_log[self.log_counter] = self.radius
-            super().logData()
+
+                self.basePoseW_log[:, self.log_counter] = self.basePoseW
+                self.baseTwistW_log[:, self.log_counter] = self.baseTwistW
+                self.q_des_log[:, self.log_counter] = self.q_des
+                self.q_log[:, self.log_counter] = self.q
+                self.qd_des_log[:, self.log_counter] = self.qd_des
+                self.qd_log[:, self.log_counter] = self.qd
+                self.tau_ffwd_log[:, self.log_counter] = self.tau_ffwd
+                self.tau_log[:, self.log_counter] = self.tau
+                self.time_log[self.log_counter] = self.time
+                self.log_counter += 1
 
     def startSimulator(self):
         os.system("killall rosmaster rviz gzserver coppeliaSim")
@@ -126,11 +165,15 @@ class GenericSimulator(BaseController):
         checkRosMaster()
         ros.sleep(1.5)
         # run robot state publisher + load robot description + rviz
-        launchFileGeneric(rospkg.RosPack().get_path('tractor_description') + "/launch/rviz_nojoints.launch")
+        launchFileGeneric(rospkg.RosPack().get_path('tractor_description') + "/launch/multiple_robots.launch")
         groundParams = Ground()
         self.tracked_vehicle_simulator = TrackedVehicleSimulator(dt=conf.robot_params[p.robot_name]['dt'], ground=groundParams)
-        self.tracked_vehicle_simulator.initSimulation(vbody_init=np.array([0,0,0.0]), pose_init=self.p0) #TODO make this a parameter
-        self.robot = getRobotModelFloating(self.robot_name)
+        self.tracked_vehicle_simulator.initSimulation(vbody_init=np.array([0,0,0.0]),
+                                                      pose_init=np.array([conf.robot_params[p.robot_name]['spawn_x'],
+                                                                          conf.robot_params[p.robot_name]['spawn_y'],
+                                                                          conf.robot_params[p.robot_name]['spawn_yaw']]))
+
+
         # instantiating additional publishers
         self.joint_pub = ros.Publisher("/" + self.robot_name + "/joint_states", JointState, queue_size=1)
         self.groundtruth_pub = ros.Publisher("/" + self.robot_name + "/ground_truth", Odometry, queue_size=1, tcp_nodelay=True)
@@ -152,7 +195,7 @@ class GenericSimulator(BaseController):
         super().deregister_node()
 
     def startupProcedure(self):
-            self.basePoseW[2] = 0.25 #fixed height TODO change this when on slopes
+            self.basePoseW[2] = conf.robot_params[p.robot_name]['spawn_z']
             self.broadcast_world = False
             self.slow_down_factor = 1
             # loop frequency
@@ -430,10 +473,10 @@ class GenericSimulator(BaseController):
 
         self.quaternion = pin.Quaternion(pin.rpy.rpyToMatrix(self.euler))
         self.b_R_w = self.math_utils.rpyToRot(self.euler)
-        #publish TF for rviz
+        #publish TF for rviz TODO it is very slow, consider using tf2_ros instead of tf
         self.broadcaster.sendTransform(self.u.linPart(self.basePoseW),
                                        self.quaternion,
-                                       ros.Time.now(), '/base_link', '/world')
+                                       ros.Time.now(), "/" + self.robot_name + '/base_link', '/world')
         self.pub_odom_msg(self.groundtruth_pub) #this is to publish on the topic groundtruth if somebody needs it
         self.q = q_des.copy()
         self.qd = qd_des.copy()
@@ -462,7 +505,6 @@ class GenericSimulator(BaseController):
 def talker(p):
     p.start()
     p.startSimulator()
-    p.robot.na = 2 #initialize properly vars for only 2 actuators (other 2 are caster wheels)
     p.initVars()
     p.q_old = np.zeros(2)
     p.startupProcedure()
@@ -498,7 +540,7 @@ def talker(p):
                 print(colored("Open loop test accomplished", "red"))
                 break
 
-            p.tau_ffwd = np.zeros(p.robot.na)
+            p.tau_ffwd = np.zeros(2)
             p.q_des = p.q_des + p.qd_des * conf.robot_params[p.robot_name]['dt']
 
             p.des_x, p.des_y, p.des_theta, p.v_d, p.omega_d, p.v_dot_d, p.omega_dot_d, _ = p.traj.evalTraj(p.time)
