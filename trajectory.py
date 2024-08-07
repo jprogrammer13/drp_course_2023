@@ -31,14 +31,17 @@ class LoopTrajectory:
         y = self.spline_y(t)
         x_dot = self.spline_x(t, 1)
         y_dot = self.spline_y(t, 1)
-        omega = np.arctan2(y_dot, x_dot)
+        theta = np.arctan2(y_dot, x_dot)
         v = np.linalg.norm(np.array([x_dot,y_dot]))
         x_ddot = self.spline_x(t, 2)
         y_ddot = self.spline_y(t, 2)
+        omega = (x_dot * y_ddot - y_dot * x_ddot) / (x_dot**2 + y_dot**2)
         v_dot = np.linalg.norm(np.array([x_ddot,y_ddot]))
-        omega_dot = (x_dot * y_ddot - y_dot * x_ddot) / (x_dot**2 + y_dot**2)
-        
-        return x, y, omega, v, x_dot, y_dot, omega_dot, v_dot
+
+        #TODO
+        omega_dot = 0.
+
+        return x, y, theta, v, omega, omega_dot, v_dot
     
     def plot_trajectory(self):
         """

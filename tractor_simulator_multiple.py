@@ -581,7 +581,7 @@ def start_robots(robots, trajectory):
         t += np.random.randint(5,10)
         robot.t_start = t
 
-        x, y, yaw, _, _, _, _, _ = trajectory.eval_trajectory(robot.t_start)
+        x, y, yaw, _, _, _, _ = trajectory.eval_trajectory(robot.t_start)
         print(f"robot: {robot.robot_name}, t_start: {robot.t_start} x: {x} y: {y} yaw: {yaw}")
 
         robot.set_pose_init(x, y, yaw)
@@ -598,7 +598,7 @@ def start_robots(robots, trajectory):
 def generate_path_msg(trajectory):
 
     t = np.linspace(0, trajectory.t_tot, 100)
-    x, y, _ , _ , _, _, _, _ = trajectory.eval_trajectory(t)
+    x, y, _ , _ , _, _, _ = trajectory.eval_trajectory(t)
 
     path_msg = Path()
     path_msg.header.frame_id = 'world'
@@ -645,28 +645,26 @@ def talker(robots, trajectory):
             robot.robot_state.theta = robot.basePoseW[robot.u.sp_crd["AZ"]]
             # print(f"pos X: {robot.x} Y: {robot.y} th: {robot.theta}")
 
-            # self.des_x, self.des_y, self.des_theta, self.v_d, self.omega_d, self.v_dot_d, self.omega_dot_d = self.traj.evalTraj(
-            #     self.time)
-            # if traj_finished:
-            #     break
+            robot.des_x, robot.des_y, robot.des_theta, robot.v_d, robot.omega_d, robot.v_dot_d, robot.omega_dot_d = trajectory.eval_trajectory(robot.time)
 
-            # if self.ControlType == 'CLOSED_LOOP_UNICYCLE':
-            #     self.ctrl_v, self.ctrl_omega, self.V, self.V_dot = self.controller.control_unicycle(
-            #         self.robot_state, self.time, self.des_x, self.des_y, self.des_theta, self.v_d, self.omega_d, False)
 
-            # self.qd_des = self.mapToWheels(self.ctrl_v, self.ctrl_omega)
+            if robot.ControlType == 'CLOSED_LOOP_UNICYCLE':
+                robot.ctrl_v, robot.ctrl_omega, robot.V, robot.V_dot = robot.controller.control_unicycle(
+                    robot.robot_state, robot.time, robot.des_x, robot.des_y, robot.des_theta, robot.v_d, robot.omega_d, False)
 
-            # if not self.ControlType == 'CLOSED_LOOP_UNICYCLE' and self.LONG_SLIP_COMPENSATION != 'NONE' and not traj_finished:
-            #     if self.LONG_SLIP_COMPENSATION == 'NN':
-            #         self.qd_des, self.beta_l_control, self.beta_r_control, self.radius = self.computeLongSlipCompensationNN(
-            #             self.ctrl_v, self.ctrl_omega, self.qd_des, constants)
-            #     else:  # exponential
-            #         self.qd_des, self.beta_l_control, self.beta_r_control, self.radius = self.computeLongSlipCompensation(
-            #             self.ctrl_v, self.ctrl_omega, self.qd_des, constants)
+            robot.qd_des = robot.mapToWheels(robot.ctrl_v, robot.ctrl_omega)
+
+            if not robot.ControlType == 'CLOSED_LOOP_UNICYCLE' and robot.LONG_SLIP_COMPENSATION != 'NONE':
+                if robot.LONG_SLIP_COMPENSATION == 'NN':
+                    robot.qd_des, robot.beta_l_control, robot.beta_r_control, robot.radius = robot.computeLongSlipCompensationNN(
+                        robot.ctrl_v, robot.ctrl_omega, robot.qd_des, constants)
+                else:  # exponential
+                    robot.qd_des, robot.beta_l_control, robot.beta_r_control, robot.radius = robot.computeLongSlipCompensation(
+                        robot.ctrl_v, robot.ctrl_omega, robot.qd_des, constants)
 
             # # note there is only a ros_impedance controller, not a joint_group_vel controller, so I can only set velocity by integrating the wheel speed and
             # # senting it to be tracked from the impedance loop
-            # self.q_des = self.q_des + self.qd_des * conf.robot_params[self.robot_name]['dt']
+            robot.q_des = robot.q_des + robot.qd_des * conf.robot_params[robot.robot_name]['dt']
 
             robot.send_des_jstate(robot.q_des, robot.qd_des, robot.tau_ffwd)
 
