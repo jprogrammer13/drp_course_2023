@@ -2,7 +2,7 @@ import numpy as np
 
 robot_params = {}
 
-robot_params['tractor'] ={'dt': 0.01,
+robot_params['tractor0'] ={'dt': 0.01,
                         'kp': np.array([100.,   100.]),
                         'kd':  np.array([10.,    10.]),
                         'q_0':  np.array([0, 0]),
@@ -63,6 +63,7 @@ robot_params['tractor4'] ={'dt': 0.01,
                         'spawn_yaw': 0.1,
                         'buffer_size': 5000}
 
+global_dt = 0.01
 
 verbose = False
 plotting = True
