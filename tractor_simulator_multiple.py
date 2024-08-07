@@ -39,7 +39,7 @@ class GenericSimulator(BaseController):
     def __init__(self, robot_name="tractor"):
         super().__init__(robot_name=robot_name, external_conf = conf)
         print("Initialized tractor multiple controller---------------------------------------------------------------")
-        self.ControlType = 'OPEN_LOOP' #'OPEN_LOOP' 'CLOSED_LOOP_UNICYCLE' 'CLOSED_LOOP_SLIP_0' 'CLOSED_LOOP_SLIP'
+        self.ControlType = 'CLOSED_LOOP_UNICYCLE' #'OPEN_LOOP' 'CLOSED_LOOP_UNICYCLE' 'CLOSED_LOOP_SLIP_0' 'CLOSED_LOOP_SLIP'
         self.SAVE_BAGS = False
         self.LONG_SLIP_COMPENSATION = 'NONE'#'NN', 'EXP', 'NONE'
 
@@ -159,9 +159,7 @@ class GenericSimulator(BaseController):
 
     def startSimulator(self):
 
-        # launch roscore
-        checkRosMaster()
-        ros.sleep(1.5)
+
         # run robot state publisher + load robot description + rviz
         #launchFileGeneric(rospkg.RosPack().get_path('tractor_description') + "/launch/multiple_robots.launch")
         groundParams = Ground()
@@ -178,7 +176,7 @@ class GenericSimulator(BaseController):
 
         # instantiating objects
         self.ros_pub = RosPub(self.robot_name, only_visual=True)
-        self.pub_des_jstate = ros.Publisher("/command", JointState, queue_size=1, tcp_nodelay=True)
+        self.pub_des_jstate = ros.Publisher("/" + self.robot_name +"/command", JointState, queue_size=1, tcp_nodelay=True)
 
 
     def get_command_vel(self, msg):
@@ -191,10 +189,7 @@ class GenericSimulator(BaseController):
 
     def startupProcedure(self):
             self.basePoseW[2] = conf.robot_params[p.robot_name]['spawn_z']
-            self.broadcast_world = False
-            self.slow_down_factor = 1
-            # loop frequency
-            self.rate = ros.Rate(1 / (self.slow_down_factor * conf.robot_params[p.robot_name]['dt']))
+
 
 
     def plotData(self):
@@ -466,8 +461,10 @@ class GenericSimulator(BaseController):
         self.baseTwistW[:2] = pose_der[:2]
         self.baseTwistW[self.u.sp_crd["AZ"]] = pose_der[2]
 
+
         self.quaternion = pin.Quaternion(pin.rpy.rpyToMatrix(self.euler))
-        self.b_R_w = self.math_utils.rpyToRot(self.euler)
+        # this will be used only with slopes
+        # self.b_R_w = self.math_utils.rpyToRot(self.euler)
 
         #publish TF for rviz TODO it is very slow, consider using tf2_ros instead of tf
         self.broadcaster.sendTransform(self.u.linPart(self.basePoseW),
@@ -478,8 +475,13 @@ class GenericSimulator(BaseController):
         self.qd = qd_des.copy()
         self.joint_pub.publish(msg)  # this publishes q = q_des, it is just for rviz
 
-        if np.mod(self.time,1) == 0:
-            print(colored(f"TIME: {self.time}","red"))
+        self.ros_pub.publishVisual(delete_markers=False)
+        self.beta_l, self.beta_r, self.alpha = self.estimateSlippages(self.baseTwistW, self.basePoseW[self.u.sp_crd["AZ"]], self.qd)
+        # log variables
+        self.logData()
+
+    def getGPSReading(self):
+        return self.basePoseW+ self.noise_pose, self.baseTwistW+ self.noise_twist
 
     def pub_odom_msg(self, odom_publisher):
         msg = Odometry()
@@ -498,7 +500,10 @@ class GenericSimulator(BaseController):
         msg.twist.twist.angular.z = self.baseTwistW[self.u.sp_crd["AZ"]]
         odom_publisher.publish(msg)
 
-def talker(p, p1):
+def talker(p, p1, p2):
+    #common stuff
+    # launch roscore
+    checkRosMaster()
     launchFileGeneric(rospkg.RosPack().get_path(
             'tractor_description') + "/launch/multiple_robots.launch")
 
@@ -507,128 +512,107 @@ def talker(p, p1):
     p.initVars()
     p.startupProcedure()
 
-    # TODO
-    # p1.start()
-    # p1.startSimulator()
-    # p1.initVars()
-    # p1.startupProcedure()
+    p1.start()
+    p1.startSimulator()
+    p1.initVars()
+    p1.startupProcedure()
 
-    robot_state = Robot()
+    p2.start()
+    p2.startSimulator()
+    p2.initVars()
+    p2.startupProcedure()
+
+    slow_down_factor = 1
+    # loop frequency
+    rate = ros.Rate(1 / (slow_down_factor * conf.robot_params[p.robot_name]['dt']))
+
+    #TODO extend to multiple
+    p.robot_state = Robot()
     if p.SAVE_BAGS:
         bag_name = f"{p.ControlType}_Long_{p.LONG_SLIP_COMPENSATION}.bag"
         p.recorder = RosbagControlledRecorder(bag_name=bag_name)
         p.recorder.start_recording_srv()
-    # OPEN loop control
-    if p.ControlType == 'OPEN_LOOP':
-        counter = 0
-        v_ol = np.linspace(0.4, 0.4, np.int32(20./conf.robot_params[p.robot_name]['dt']))
-        omega_ol = np.linspace(0.2, 0.2, np.int32(20./conf.robot_params[p.robot_name]['dt']))
-        traj_length = len(v_ol)
-        p.traj = Trajectory(ModelsList.UNICYCLE, 0, 0, 0, DT=conf.robot_params[p.robot_name]['dt'], v=v_ol, omega=omega_ol)
 
-        while not ros.is_shutdown():
-            if counter<traj_length:
-                p.v_d = v_ol[counter]
-                p.omega_d = omega_ol[counter]
-                p.qd_des = p.mapToWheels(p.v_d, p.omega_d )
-                counter+=1
-            else:
-                print(colored("Open loop test accomplished", "red"))
-                break
+    time_global = 0.
 
-            p.tau_ffwd = np.zeros(2)
-            p.q_des = p.q_des + p.qd_des * conf.robot_params[p.robot_name]['dt']
+    # CLOSE loop control
+    # generate reference trajectory
+    vel_gen = VelocityGenerator(simulation_time=40.,    DT=conf.robot_params[p.robot_name]['dt'])
+    initial_des_x = 0.0
+    initial_des_y = 0.0
+    initial_des_theta = 0.0
 
-            p.des_x, p.des_y, p.des_theta, p.v_d, p.omega_d, p.v_dot_d, p.omega_dot_d, _ = p.traj.evalTraj(p.time)
-            #note there is only a ros_impedance controller, not a joint_group_vel controller, so I can only set velocity by integrating the wheel speed and
-            #senting it to be tracked from the impedance loop
-            p.send_des_jstate(p.q_des, p.qd_des, p.tau_ffwd)
-            #TODO
-            #p1.send_des_jstate(p1.q_des, p1.qd_des, p1.tau_ffwd)
+    v_ol, omega_ol, v_dot_ol, omega_dot_ol, _ = vel_gen.velocity_mir_smooth(v_max_=0.1, omega_max_=0.3)
+    p.traj = Trajectory(ModelsList.UNICYCLE, initial_des_x, initial_des_y, initial_des_theta, DT=conf.robot_params[p.robot_name]['dt'],
+                        v=v_ol, omega=omega_ol, v_dot=v_dot_ol, omega_dot=omega_dot_ol)
 
 
-            p.ros_pub.publishVisual(delete_markers=False)
-            p.beta_l, p.beta_r, p.alpha = p.estimateSlippages(p.baseTwistW, p.basePoseW[p.u.sp_crd["AZ"]], p.qd)
-
-            # log variables
-            p.logData()
-            # wait for synconization of the control loop
-            p.rate.sleep()
-            p.time = np.round(p.time + np.array([conf.robot_params[p.robot_name]['dt']]),  3)  # to avoid issues of dt 0.0009999
-    else:
-
-        # CLOSE loop control
-        # generate reference trajectory
-        vel_gen = VelocityGenerator(simulation_time=40.,    DT=conf.robot_params[p.robot_name]['dt'])
-        # initial_des_x = 0.1
-        # initial_des_y = 0.1
-        # initial_des_theta = 0.3
-        initial_des_x = 0.0
-        initial_des_y = 0.0
-        initial_des_theta = 0.0
-
-        v_ol, omega_ol, v_dot_ol, omega_dot_ol, _ = vel_gen.velocity_mir_smooth(v_max_=0.1, omega_max_=0.3)
-        p.traj = Trajectory(ModelsList.UNICYCLE, initial_des_x, initial_des_y, initial_des_theta, DT=conf.robot_params[p.robot_name]['dt'],
-                            v=v_ol, omega=omega_ol, v_dot=v_dot_ol, omega_dot=omega_dot_ol)
+    # Lyapunov controller parameters
+    params = LyapunovParams(K_P=10., K_THETA=1., DT=conf.robot_params[p.robot_name]['dt'])
+    p.controller = LyapunovController(params=params)
+    p.traj.set_initial_time(start_time=time_global)
 
 
-        # Lyapunov controller parameters
-        params = LyapunovParams(K_P=5., K_THETA=1., DT=conf.robot_params[p.robot_name]['dt'])
-        p.controller = LyapunovController(params=params)
-        p.traj.set_initial_time(start_time=p.time)
-        while not ros.is_shutdown():
-            # update kinematics
-            robot_state.x = p.basePoseW[p.u.sp_crd["LX"]]
-            robot_state.y = p.basePoseW[p.u.sp_crd["LY"]]
-            robot_state.theta = p.basePoseW[p.u.sp_crd["AZ"]]
-            #print(f"pos X: {robot.x} Y: {robot.y} th: {robot.theta}")
+    while not ros.is_shutdown():
+        p.time = time_global
+        p1.time = time_global
+        p2.time = time_global
 
-            p.des_x, p.des_y, p.des_theta, p.v_d, p.omega_d, p.v_dot_d, p.omega_dot_d, traj_finished = p.traj.evalTraj(p.time)
-            if traj_finished:
-                break
+        # update kinematics
+        p.robot_state.x = p.basePoseW[p.u.sp_crd["LX"]]
+        p.robot_state.y = p.basePoseW[p.u.sp_crd["LY"]]
+        p.robot_state.theta = p.basePoseW[p.u.sp_crd["AZ"]]
+        #print(f"pos X: {robot.x} Y: {robot.y} th: {robot.theta}")
 
-            if p.ControlType=='CLOSED_LOOP_SLIP_0':
-                p.ctrl_v, p.ctrl_omega,  p.V, p.V_dot, p.alpha_control = p.controller.control_alpha(robot_state, p.time, p.des_x, p.des_y, p.des_theta, p.v_d, p.omega_d,  p.v_dot_d, p.omega_dot_d, traj_finished, approx=True)
-                p.des_theta -=  p.controller.alpha_exp(p.v_d, p.omega_d)  # we track theta_d -alpha_d
+        p.des_x, p.des_y, p.des_theta, p.v_d, p.omega_d, p.v_dot_d, p.omega_dot_d, traj_finished = p.traj.evalTraj(p.time)
+        if traj_finished:
+            break
 
-            if p.ControlType == 'CLOSED_LOOP_SLIP':
-                p.ctrl_v, p.ctrl_omega, p.V, p.V_dot, p.alpha_control = p.controller.control_alpha(robot_state, p.time, p.des_x, p.des_y, p.des_theta, p.v_d, p.omega_d,  p.v_dot_d, p.omega_dot_d, traj_finished,approx=False)
-                p.des_theta -= p.controller.alpha_exp(p.v_d, p.omega_d)  # we track theta_d -alpha_d
+        # if p.ControlType=='CLOSED_LOOP_SLIP_0':
+        #     p.ctrl_v, p.ctrl_omega,  p.V, p.V_dot, p.alpha_control = p.controller.control_alpha(p.robot_state, p.time, p.des_x, p.des_y, p.des_theta, p.v_d, p.omega_d,  p.v_dot_d, p.omega_dot_d, traj_finished, approx=True)
+        #     p.des_theta -=  p.controller.alpha_exp(p.v_d, p.omega_d)  # we track theta_d -alpha_d
+        #
+        # if p.ControlType == 'CLOSED_LOOP_SLIP':
+        #     p.ctrl_v, p.ctrl_omega, p.V, p.V_dot, p.alpha_control = p.controller.control_alpha(p.robot_state, p.time, p.des_x, p.des_y, p.des_theta, p.v_d, p.omega_d,  p.v_dot_d, p.omega_dot_d, traj_finished,approx=False)
+        #     p.des_theta -= p.controller.alpha_exp(p.v_d, p.omega_d)  # we track theta_d -alpha_d
 
-            if p.ControlType=='CLOSED_LOOP_UNICYCLE':
-                p.ctrl_v, p.ctrl_omega, p.V, p.V_dot = p.controller.control_unicycle(robot_state, p.time, p.des_x, p.des_y, p.des_theta, p.v_d, p.omega_d, traj_finished)
-            p.qd_des = p.mapToWheels(p.ctrl_v, p.ctrl_omega)
+        if p.ControlType=='CLOSED_LOOP_UNICYCLE':
+            p.ctrl_v, p.ctrl_omega, p.V, p.V_dot = p.controller.control_unicycle(p.robot_state, p.time, p.des_x, p.des_y, p.des_theta, p.v_d, p.omega_d, traj_finished)
 
-            if not p.ControlType=='CLOSED_LOOP_UNICYCLE' and p.LONG_SLIP_COMPENSATION != 'NONE' and not traj_finished:
-                if p.LONG_SLIP_COMPENSATION=='NN':
-                    p.qd_des, p.beta_l_control, p.beta_r_control, p.radius = p.computeLongSlipCompensationNN(p.ctrl_v, p.ctrl_omega,p.qd_des, constants)
-                else:#exponential
-                    p.qd_des, p.beta_l_control, p.beta_r_control, p.radius = p.computeLongSlipCompensation(p.ctrl_v, p.ctrl_omega, p.qd_des, constants)
-    
-            # note there is only a ros_impedance controller, not a joint_group_vel controller, so I can only set velocity by integrating the wheel speed and
-            # senting it to be tracked from the impedance loop
-            p.q_des = p.q_des + p.qd_des * conf.robot_params[p.robot_name]['dt']
+        p.qd_des = p.mapToWheels(p.ctrl_v, p.ctrl_omega)
 
-            p.send_des_jstate(p.q_des, p.qd_des, p.tau_ffwd)
-            # TODO
-            # p1.send_des_jstate(p1.q_des, p1.qd_des, p1.tau_ffwd)
+        if not p.ControlType=='CLOSED_LOOP_UNICYCLE' and p.LONG_SLIP_COMPENSATION != 'NONE' and not traj_finished:
+            if p.LONG_SLIP_COMPENSATION=='NN':
+                p.qd_des, p.beta_l_control, p.beta_r_control, p.radius = p.computeLongSlipCompensationNN(p.ctrl_v, p.ctrl_omega,p.qd_des, constants)
+            else:#exponential
+                p.qd_des, p.beta_l_control, p.beta_r_control, p.radius = p.computeLongSlipCompensation(p.ctrl_v, p.ctrl_omega, p.qd_des, constants)
 
-            p.ros_pub.publishVisual(delete_markers=False)
+        # note there is only a ros_impedance controller, not a joint_group_vel controller, so I can only set velocity by integrating the wheel speed and
+        # senting it to be tracked from the impedance loop
+        p.q_des = p.q_des + p.qd_des * conf.robot_params[p.robot_name]['dt']
 
-            p.beta_l, p.beta_r, p.alpha = p.estimateSlippages(p.baseTwistW,p.basePoseW[p.u.sp_crd["AZ"]], p.qd)
-            # log variables
-            p.logData()
-            # wait for synconization of the control loop
-            p.rate.sleep()
-            p.time = np.round(p.time + np.array([conf.robot_params[p.robot_name]['dt']]), 3) # to avoid issues of dt 0.0009999
+        p.send_des_jstate(p.q_des, p.qd_des, p.tau_ffwd)
+        # TODO
+        p1.send_des_jstate(-p.q_des, -p.qd_des, -p.tau_ffwd)
+        p2.send_des_jstate(2*p.q_des, 2*p.qd_des, -p.tau_ffwd)
+
+
+        # wait for synconization of the control loop
+        rate.sleep()
+        time_global = np.round(time_global + np.array([conf.robot_params[p.robot_name]['dt']]), 3)  # to avoid issues of dt 0.0009999
+
+        if np.mod( time_global, 1) == 0:
+            print(colored(f"TIME: { time_global}", "red"))
+
     if p.SAVE_BAGS:
         p.recorder.stop_recording_srv()
 
 if __name__ == '__main__':
     p = GenericSimulator("tractor")
     p1 = GenericSimulator("tractor1")
+    p2 = GenericSimulator("tractor2")
     try:
-        talker(p, p1)
+        talker(p, p1, p2)
     except (ros.ROSInterruptException, ros.service.ServiceException):
         pass
     if p.SAVE_BAGS:
