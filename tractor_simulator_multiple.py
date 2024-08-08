@@ -645,7 +645,7 @@ def talker(robots, trajectory):
             robot.robot_state.theta = robot.basePoseW[robot.u.sp_crd["AZ"]]
             # print(f"pos X: {robot.x} Y: {robot.y} th: {robot.theta}")
 
-            robot.des_x, robot.des_y, robot.des_theta, robot.v_d, robot.omega_d, robot.v_dot_d, robot.omega_dot_d = trajectory.eval_trajectory(robot.time)
+            robot.des_x, robot.des_y, robot.des_theta, robot.v_d, robot.omega_d, robot.v_dot_d, robot.omega_dot_d = trajectory.eval_trajectory(robot.time + robot.t_start)
 
 
             if robot.ControlType == 'CLOSED_LOOP_UNICYCLE':
