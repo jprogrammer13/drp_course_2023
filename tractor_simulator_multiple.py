@@ -612,14 +612,13 @@ def generate_path_msg(trajectory):
         pose.pose.position.z = 0.0
         # You can also add orientation if available
         path_msg.poses.append(pose)
-
     return path_msg
-
 
 def talker(robots, trajectory):
     # common stuff
 
     start_robots(robots, trajectory)
+    robots[0].set_pose_init(0,0,0)
 
     path_pub = ros.Publisher('/trajectory_path', Path, queue_size=10)
     path_msg = generate_path_msg(trajectory)
@@ -630,8 +629,17 @@ def talker(robots, trajectory):
 
     time_global = 0.
 
-    # CLOSE loop control
+    # previous traj
+    vel_gen = VelocityGenerator(simulation_time=40., DT=conf.robot_params[robots[0].robot_name]['dt'])
+    initial_des_x = 0.0
+    initial_des_y = 0.0
+    initial_des_theta = 0.0
+    v_ol, omega_ol, v_dot_ol, omega_dot_ol, _ = vel_gen.velocity_mir_smooth(v_max_=0.1, omega_max_=0.3)
+    robots[0].traj = Trajectory(ModelsList.UNICYCLE, initial_des_x, initial_des_y, initial_des_theta,
+                        DT=conf.robot_params[robots[0].robot_name]['dt'],  v=v_ol, omega=omega_ol, v_dot=v_dot_ol, omega_dot=omega_dot_ol)
+    robots[0].traj.set_initial_time(start_time=time_global)
 
+    # CLOSE loop control
     while not ros.is_shutdown():
 
         path_pub.publish(path_msg)
@@ -645,8 +653,11 @@ def talker(robots, trajectory):
             robot.robot_state.theta = robot.basePoseW[robot.u.sp_crd["AZ"]]
             # print(f"pos X: {robot.x} Y: {robot.y} th: {robot.theta}")
 
-            robot.des_x, robot.des_y, robot.des_theta, robot.v_d, robot.omega_d, robot.v_dot_d, robot.omega_dot_d = trajectory.eval_trajectory(robot.time + robot.t_start)
-
+            #robot.des_x, robot.des_y, robot.des_theta, robot.v_d, robot.omega_d, robot.v_dot_d, robot.omega_dot_d = trajectory.eval_trajectory(robot.time + robot.t_start)
+            robot.des_x, robot.des_y, robot.des_theta, robot.v_d, robot.omega_d, robot.v_dot_d, robot.omega_dot_d , traj_finished = robots[0].traj.evalTraj(
+                robots[0].time)
+            if traj_finished:
+                break
 
             if robot.ControlType == 'CLOSED_LOOP_UNICYCLE':
                 robot.ctrl_v, robot.ctrl_omega, robot.V, robot.V_dot = robot.controller.control_unicycle(
@@ -685,7 +696,7 @@ if __name__ == '__main__':
     traj_t_tot = 40
     trajectory = LoopTrajectory(traj_viapoints, traj_t_tot)
 
-    n_tracktors = 5
+    n_tracktors = 1
     tracktors = []
 
     for i in range(n_tracktors):
@@ -698,5 +709,5 @@ if __name__ == '__main__':
     ros.signal_shutdown("killed")
     for tracktor in tracktors:
         tracktor.deregister_node()
-        print(f"Plotting data of {tracktor.robot_name}")
-        # tracktor.plotData()
+    print(f"Plotting data of {tracktor.robot_name}")
+    tracktors[0].plotData()
