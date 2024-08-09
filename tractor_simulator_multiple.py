@@ -22,6 +22,7 @@ from base_controllers.tracked_robot.environment.trajectory import Trajectory, Mo
 from base_controllers.tracked_robot.controllers.lyapunov import LyapunovController, LyapunovParams, Robot
 from base_controllers.tracked_robot.utils import constants as constants
 from base_controllers.utils.ros_publish import RosPub
+from base_controllers.utils.math_tools import unwrap_angle
 from matplotlib import pyplot as plt
 from numpy import nan
 import rospkg
@@ -590,7 +591,7 @@ def start_robots(robots, trajectory):
     t = 0
 
     for robot in robots:
-        t += np.random.randint(5,10)
+        t += np.random.randint(10,15)
         robot.t_start = t
 
         x, y, yaw, _, _, _, _ = trajectory.eval_trajectory(robot.t_start)
@@ -666,8 +667,9 @@ def talker(robots, trajectory):
             robot.robot_state.theta = robot.basePoseW[robot.u.sp_crd["AZ"]]
             # print(f"pos X: {robot.x} Y: {robot.y} th: {robot.theta}")
 
+            _, _, old_des_theta, _, _, _, _ = trajectory.eval_trajectory(robot.time + robot.t_start - 5*conf.global_dt)
             robot.des_x, robot.des_y, robot.des_theta, robot.v_d, robot.omega_d, robot.v_dot_d, robot.omega_dot_d = trajectory.eval_trajectory(robot.time + robot.t_start)
-
+            robot.des_theta, _ = unwrap_angle(robot.des_theta, old_des_theta)
 
             # robot.des_x, robot.des_y, robot.des_theta, robot.v_d, robot.omega_d, robot.v_dot_d, robot.omega_dot_d , traj_finished = robots[0].traj.evalTraj(
             #     robots[0].time)
@@ -711,7 +713,7 @@ if __name__ == '__main__':
     traj_t_tot = 40
     trajectory = LoopTrajectory(traj_viapoints, traj_t_tot)
 
-    n_tracktors = 3 # with more than 3 it gets crazy
+    n_tracktors = 5 # with more than 3 it gets crazy
     tracktors = []
 
     for i in range(n_tracktors):

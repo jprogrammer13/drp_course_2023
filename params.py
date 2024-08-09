@@ -12,7 +12,7 @@ robot_params['tractor0'] ={'dt': 0.01,
                         'spawn_y': 0.05,
                         'spawn_z': 0.25,
                         'spawn_yaw': 0.1,
-                        'buffer_size': 5000}
+                        'buffer_size': 15000}
 
 robot_params['tractor1'] ={'dt': 0.01,
                         'kp': np.array([100.,   100.]),
@@ -24,7 +24,7 @@ robot_params['tractor1'] ={'dt': 0.01,
                         'spawn_y': 0.05,
                         'spawn_z': 0.25,
                         'spawn_yaw': 0.1,
-                        'buffer_size': 5000}
+                        'buffer_size': 15000}
 
 robot_params['tractor2'] ={'dt': 0.01,
                         'kp': np.array([100.,   100.]),
@@ -36,7 +36,7 @@ robot_params['tractor2'] ={'dt': 0.01,
                         'spawn_y': 0.05,
                         'spawn_z': 0.25,
                         'spawn_yaw': 0.1,
-                        'buffer_size': 5000}
+                        'buffer_size': 15000}
 
 
 robot_params['tractor3'] ={'dt': 0.01,
@@ -49,7 +49,7 @@ robot_params['tractor3'] ={'dt': 0.01,
                         'spawn_y': 0.05,
                         'spawn_z': 0.25,
                         'spawn_yaw': 0.1,
-                        'buffer_size': 5000}
+                        'buffer_size': 15000}
 
 robot_params['tractor4'] ={'dt': 0.01,
                         'kp': np.array([100.,   100.]),
@@ -61,7 +61,7 @@ robot_params['tractor4'] ={'dt': 0.01,
                         'spawn_y': -1,
                         'spawn_z': 0.25,
                         'spawn_yaw': 0.1,
-                        'buffer_size': 5000}
+                        'buffer_size': 15000}
 
 global_dt = 0.01
 
