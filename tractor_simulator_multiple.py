@@ -322,7 +322,7 @@ class GenericSimulator(BaseController):
             plt.legend()
             plt.subplot(4, 1, 4)
             plt.plot(self.time_log, self.radius_log, "-b")
-            plt.ylim([-1, 1])
+            plt.ylim([-10, 10])
             plt.ylabel("radius")
             plt.grid(True)
 
@@ -410,6 +410,7 @@ class GenericSimulator(BaseController):
 
     def estimateSlippages(self, W_baseTwist, theta, qd):
 
+
         wheel_L = qd[0]
         wheel_R = qd[1]
         w_vel_xy = np.zeros(2)
@@ -421,6 +422,16 @@ class GenericSimulator(BaseController):
         w_R_b = np.array([[np.cos(theta), -np.sin(theta)],
                          [np.sin(theta), np.cos(theta)]])
         b_vel_xy = (w_R_b.T).dot(w_vel_xy)
+        v = np.linalg.norm(b_vel_xy)
+
+        #compute turning radius for logging
+        if (abs(omega) < 1e-05) and (abs(v) > 1e-05):
+            radius = 1e08 * np.sign(v)
+        elif (abs(omega) < 1e-05) and (abs(v) < 1e-05):
+            radius = 1e8
+        else:
+            radius = v / (omega)
+
         b_vel_x = b_vel_xy[0]
 
         # track velocity  from encoder
@@ -440,7 +451,7 @@ class GenericSimulator(BaseController):
         else:
             side_slip = math.atan2(b_vel_xy[1], b_vel_xy[0])
 
-        return beta_l, beta_r, side_slip
+        return beta_l, beta_r, side_slip, radius
 
     def computeLongSlipCompensation(self, v, omega, qd_des, constants):
         # in the case radius is infinite, betas are zero (this is to avoid Nans)
@@ -479,6 +490,7 @@ class GenericSimulator(BaseController):
         return qd_comp, beta_l, beta_r, radius
 
     def computeLongSlipCompensationNN(self, v, omega, qd_des, constants):
+        # in the case radius is infinite, betas are zero (this is to avoid Nans)
         # in the case radius is infinite, betas are zero (this is to avoid Nans)
         #
         if (abs(omega) < 1e-05) and (abs(v) > 1e-05):
@@ -538,7 +550,7 @@ class GenericSimulator(BaseController):
         self.joint_pub.publish(msg)
 
         self.ros_pub.publishVisual(delete_markers=False)
-        self.beta_l, self.beta_r, self.alpha = self.estimateSlippages(
+        self.beta_l, self.beta_r, self.alpha, self.radius = self.estimateSlippages(
             self.baseTwistW, self.basePoseW[self.u.sp_crd["AZ"]], self.qd)
         # log variables
         self.logData()
@@ -618,7 +630,8 @@ def talker(robots, trajectory):
     # common stuff
 
     start_robots(robots, trajectory)
-    robots[0].set_pose_init(0,0,0)
+    #debug
+    #robots[0].set_pose_init(0,0,0)
 
     path_pub = ros.Publisher('/trajectory_path', Path, queue_size=10)
     path_msg = generate_path_msg(trajectory)
@@ -630,14 +643,14 @@ def talker(robots, trajectory):
     time_global = 0.
 
     # previous traj
-    vel_gen = VelocityGenerator(simulation_time=40., DT=conf.robot_params[robots[0].robot_name]['dt'])
-    initial_des_x = 0.0
-    initial_des_y = 0.0
-    initial_des_theta = 0.0
-    v_ol, omega_ol, v_dot_ol, omega_dot_ol, _ = vel_gen.velocity_mir_smooth(v_max_=0.1, omega_max_=0.3)
-    robots[0].traj = Trajectory(ModelsList.UNICYCLE, initial_des_x, initial_des_y, initial_des_theta,
-                        DT=conf.robot_params[robots[0].robot_name]['dt'],  v=v_ol, omega=omega_ol, v_dot=v_dot_ol, omega_dot=omega_dot_ol)
-    robots[0].traj.set_initial_time(start_time=time_global)
+    # vel_gen = VelocityGenerator(simulation_time=40., DT=conf.robot_params[robots[0].robot_name]['dt'])
+    # initial_des_x = 0.0
+    # initial_des_y = 0.0
+    # initial_des_theta = 0.0
+    # v_ol, omega_ol, v_dot_ol, omega_dot_ol, _ = vel_gen.velocity_mir_smooth(v_max_=0.1, omega_max_=0.3)
+    # robots[0].traj = Trajectory(ModelsList.UNICYCLE, initial_des_x, initial_des_y, initial_des_theta,
+    #                     DT=conf.robot_params[robots[0].robot_name]['dt'],  v=v_ol, omega=omega_ol, v_dot=v_dot_ol, omega_dot=omega_dot_ol)
+    # robots[0].traj.set_initial_time(start_time=time_global)
 
     # CLOSE loop control
     while not ros.is_shutdown():
@@ -653,11 +666,13 @@ def talker(robots, trajectory):
             robot.robot_state.theta = robot.basePoseW[robot.u.sp_crd["AZ"]]
             # print(f"pos X: {robot.x} Y: {robot.y} th: {robot.theta}")
 
-            #robot.des_x, robot.des_y, robot.des_theta, robot.v_d, robot.omega_d, robot.v_dot_d, robot.omega_dot_d = trajectory.eval_trajectory(robot.time + robot.t_start)
-            robot.des_x, robot.des_y, robot.des_theta, robot.v_d, robot.omega_d, robot.v_dot_d, robot.omega_dot_d , traj_finished = robots[0].traj.evalTraj(
-                robots[0].time)
-            if traj_finished:
-                break
+            robot.des_x, robot.des_y, robot.des_theta, robot.v_d, robot.omega_d, robot.v_dot_d, robot.omega_dot_d = trajectory.eval_trajectory(robot.time + robot.t_start)
+
+
+            # robot.des_x, robot.des_y, robot.des_theta, robot.v_d, robot.omega_d, robot.v_dot_d, robot.omega_dot_d , traj_finished = robots[0].traj.evalTraj(
+            #     robots[0].time)
+            # if traj_finished:
+            #     break
 
             if robot.ControlType == 'CLOSED_LOOP_UNICYCLE':
                 robot.ctrl_v, robot.ctrl_omega, robot.V, robot.V_dot = robot.controller.control_unicycle(
@@ -696,7 +711,7 @@ if __name__ == '__main__':
     traj_t_tot = 40
     trajectory = LoopTrajectory(traj_viapoints, traj_t_tot)
 
-    n_tracktors = 1
+    n_tracktors = 3 # with more than 3 it gets crazy
     tracktors = []
 
     for i in range(n_tracktors):

@@ -1,7 +1,8 @@
 import numpy as np
 from scipy.interpolate import CubicSpline
 import matplotlib.pyplot as plt
-
+from base_controllers.utils.math_tools import unwrap_angle
+import math
 
 class LoopTrajectory:
     def __init__(self, viapoints, t_tot):
@@ -13,6 +14,7 @@ class LoopTrajectory:
         if not np.allclose(self.viapoints[0], self.viapoints[-1]):
             self.viapoints = np.vstack([self.viapoints, self.viapoints[0]])
         self.t_tot = t_tot
+        self.theta_old = 0.
         self.compute_spline(t_tot)
     
     def compute_spline(self, t_tot):
@@ -31,7 +33,10 @@ class LoopTrajectory:
         y = self.spline_y(t)
         x_dot = self.spline_x(t, 1)
         y_dot = self.spline_y(t, 1)
-        theta = np.arctan2(y_dot, x_dot)
+
+        theta = math.atan2(y_dot.item(0), x_dot.item(0))
+        theta_unwrapped, self.theta_old = unwrap_angle(theta, self.theta_old)
+
         v = np.linalg.norm(np.array([x_dot,y_dot]))
         x_ddot = self.spline_x(t, 2)
         y_ddot = self.spline_y(t, 2)
@@ -41,7 +46,7 @@ class LoopTrajectory:
         #TODO
         omega_dot = 0.
 
-        return x, y, theta, v, omega, omega_dot, v_dot
+        return x, y, theta_unwrapped, v, omega, omega_dot, v_dot
     
     def plot_trajectory(self):
         """
