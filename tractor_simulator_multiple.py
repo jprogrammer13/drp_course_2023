@@ -608,6 +608,8 @@ def start_robots(robots, trajectory):
         # Lyapunov controller parameters
         robot.controller = LyapunovController(params=params)
 
+        _, _, robot.old_theta,_, _, _, _ = trajectory.eval_trajectory(robot.t_start)
+
 def generate_path_msg(trajectory):
 
     t = np.linspace(0, trajectory.t_tot, 100)
@@ -667,9 +669,8 @@ def talker(robots, trajectory):
             robot.robot_state.theta = robot.basePoseW[robot.u.sp_crd["AZ"]]
             # print(f"pos X: {robot.x} Y: {robot.y} th: {robot.theta}")
 
-            _, _, old_des_theta, _, _, _, _ = trajectory.eval_trajectory(robot.time + robot.t_start - 5*conf.global_dt)
             robot.des_x, robot.des_y, robot.des_theta, robot.v_d, robot.omega_d, robot.v_dot_d, robot.omega_dot_d = trajectory.eval_trajectory(robot.time + robot.t_start)
-            robot.des_theta, _ = unwrap_angle(robot.des_theta, old_des_theta)
+            robot.des_theta, robot.old_theta = unwrap_angle(robot.des_theta, robot.old_theta)
 
             # robot.des_x, robot.des_y, robot.des_theta, robot.v_d, robot.omega_d, robot.v_dot_d, robot.omega_dot_d , traj_finished = robots[0].traj.evalTraj(
             #     robots[0].time)
@@ -710,7 +711,7 @@ if __name__ == '__main__':
 
     traj_viapoints = np.array([[-0.5, 0], [0, -1.5], [1.5, -2.5], [2.5, -1.5], [
                               3.5, -1.5], [3.5, 2.5], [2.5, 3.5], [1.5, 2.4], [0.5, 1.6]])
-    traj_t_tot = 40
+    traj_t_tot = 50
     trajectory = LoopTrajectory(traj_viapoints, traj_t_tot)
 
     n_tracktors = 5 # with more than 3 it gets crazy
