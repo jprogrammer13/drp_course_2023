@@ -353,64 +353,7 @@ class GenericSimulator(BaseController):
                      2)/constants.SPROCKET_RADIUS  # right front
         return qd_des
 
-    def generateWheelTraj(self, wheel_l=-4.5):
-        ####################################
-        # OPEN LOOP wl , wr (from -4.5 to 4.5)
-        ####################################
-        wheel_l_vec = []
-        wheel_r_vec = []
-        change_interval = 3.
-        nsamples = 12
-        if wheel_l <= 0.:  # this is to make such that the ID starts always with no rotational speed
-            wheel_r = np.linspace(-constants.MAXSPEED_RADS_PULLEY,
-                                  constants.MAXSPEED_RADS_PULLEY, nsamples)
-        else:
-            wheel_r = np.linspace(
-                constants.MAXSPEED_RADS_PULLEY, -constants.MAXSPEED_RADS_PULLEY, nsamples)
-        time = 0
-        i = 0
-        while True:
-            time = np.round(time + conf.robot_params[self.robot_name]['dt'], 3)
-            wheel_l_vec.append(wheel_l)
-            wheel_r_vec.append(wheel_r[i])
-            # detect_switch = not(round(math.fmod(time,change_interval),3) >0)
-            if time > ((1 + i) * change_interval):
-                i += 1
-            if i == len(wheel_r):
-                break
-
-        wheel_l_vec.append(0.0)
-        wheel_r_vec.append(0.0)
-        return wheel_l_vec, wheel_r_vec
-
-    def generateOpenLoopTraj(self, R_initial=0.05, R_final=0.6, increment=0.025, dt=0.005, long_v=0.1, direction="left"):
-        # only around 0.3
-        change_interval = 6.
-        increment = increment
-        turning_radius_vec = np.arange(R_initial, R_final, increment)
-        if direction == 'left':
-            ang_w = np.round(long_v / turning_radius_vec, 3)  # [rad/s]
-        else:
-            ang_w = -np.round(long_v / turning_radius_vec, 3)  # [rad/s]
-        omega_vec = []
-        v_vec = []
-        time = 0
-        i = 0
-        while True:
-            time = np.round(time + dt, 3)
-            omega_vec.append(ang_w[i])
-            v_vec.append(long_v)
-            # detect_switch = not(round(math.fmod(time,change_interval),3) >0)
-            if time > ((1 + i) * change_interval):
-                i += 1
-            if i == len(turning_radius_vec):
-                break
-        v_vec.append(0.0)
-        omega_vec.append(0.0)
-        return v_vec, omega_vec
-
     def estimateSlippages(self, W_baseTwist, theta, qd):
-
 
         wheel_L = qd[0]
         wheel_R = qd[1]
@@ -425,7 +368,7 @@ class GenericSimulator(BaseController):
         b_vel_xy = (w_R_b.T).dot(w_vel_xy)
         v = np.linalg.norm(b_vel_xy)
 
-        #compute turning radius for logging
+        # compute turning radius for logging
         if (abs(omega) < 1e-05) and (abs(v) > 1e-05):
             radius = 1e08 * np.sign(v)
         elif (abs(omega) < 1e-05) and (abs(v) < 1e-05):
@@ -592,13 +535,15 @@ def start_robots(robots, trajectory):
     t = 0
 
     for robot in robots:
-        t += np.random.randint(10,15)
+        t += np.random.randint(10, 15)
         robot.t_start = t
 
-        x, y, yaw, _, _, _, _ = trajectory.eval_trajectory(robot.t_start)
-        print(f"robot: {robot.robot_name}, t_start: {robot.t_start} x: {x} y: {y} yaw: {yaw}")
+        x, y, robot.old_theta, _, _, _, _ = trajectory.eval_trajectory(
+            robot.t_start)
+        print(
+            f"robot: {robot.robot_name}, t_start: {robot.t_start} x: {x} y: {y} yaw: {robot.old_theta}")
 
-        robot.set_pose_init(x, y, yaw)
+        robot.set_pose_init(x, y, robot.old_theta)
 
         robot.start()
         robot.startSimulator()
@@ -609,12 +554,11 @@ def start_robots(robots, trajectory):
         # Lyapunov controller parameters
         robot.controller = LyapunovController(params=params)
 
-        _, _, robot.old_theta,_, _, _, _ = trajectory.eval_trajectory(robot.t_start)
 
 def generate_path_msg(trajectory):
 
     t = np.linspace(0, trajectory.t_tot, 100)
-    x, y, _ , _ , _, _, _ = trajectory.eval_trajectory(t)
+    x, y, _, _, _, _, _ = trajectory.eval_trajectory(t)
 
     path_msg = Path()
     path_msg.header.frame_id = 'world'
@@ -630,12 +574,13 @@ def generate_path_msg(trajectory):
         path_msg.poses.append(pose)
     return path_msg
 
+
 def talker(robots, trajectory):
     # common stuff
 
     start_robots(robots, trajectory)
-    #debug
-    #robots[0].set_pose_init(0,0,0)
+    # debug
+    # robots[0].set_pose_init(0,0,0)
 
     path_pub = ros.Publisher('/trajectory_path', Path, queue_size=10)
     path_msg = generate_path_msg(trajectory)
@@ -670,8 +615,10 @@ def talker(robots, trajectory):
             robot.robot_state.theta = robot.basePoseW[robot.u.sp_crd["AZ"]]
             # print(f"pos X: {robot.x} Y: {robot.y} th: {robot.theta}")
 
-            robot.des_x, robot.des_y, robot.des_theta, robot.v_d, robot.omega_d, robot.v_dot_d, robot.omega_dot_d = trajectory.eval_trajectory(robot.time + robot.t_start)
-            robot.des_theta, robot.old_theta = unwrap_angle(robot.des_theta, robot.old_theta)
+            robot.des_x, robot.des_y, robot.des_theta, robot.v_d, robot.omega_d, robot.v_dot_d, robot.omega_dot_d = trajectory.eval_trajectory(
+                robot.time + robot.t_start)
+            robot.des_theta, robot.old_theta = unwrap_angle(
+                robot.des_theta, robot.old_theta)
 
             # robot.des_x, robot.des_y, robot.des_theta, robot.v_d, robot.omega_d, robot.v_dot_d, robot.omega_dot_d , traj_finished = robots[0].traj.evalTraj(
             #     robots[0].time)
@@ -684,17 +631,18 @@ def talker(robots, trajectory):
 
             robot.qd_des = robot.mapToWheels(robot.ctrl_v, robot.ctrl_omega)
 
-            if not robot.ControlType == 'CLOSED_LOOP_UNICYCLE' and robot.LONG_SLIP_COMPENSATION != 'NONE':
-                if robot.LONG_SLIP_COMPENSATION == 'NN':
-                    robot.qd_des, robot.beta_l_control, robot.beta_r_control, robot.radius = robot.computeLongSlipCompensationNN(
-                        robot.ctrl_v, robot.ctrl_omega, robot.qd_des, constants)
-                else:  # exponential
-                    robot.qd_des, robot.beta_l_control, robot.beta_r_control, robot.radius = robot.computeLongSlipCompensation(
-                        robot.ctrl_v, robot.ctrl_omega, robot.qd_des, constants)
+            # if not robot.ControlType == 'CLOSED_LOOP_UNICYCLE' and robot.LONG_SLIP_COMPENSATION != 'NONE':
+            #     if robot.LONG_SLIP_COMPENSATION == 'NN':
+            #         robot.qd_des, robot.beta_l_control, robot.beta_r_control, robot.radius = robot.computeLongSlipCompensationNN(
+            #             robot.ctrl_v, robot.ctrl_omega, robot.qd_des, constants)
+            #     else:  # exponential
+            #         robot.qd_des, robot.beta_l_control, robot.beta_r_control, robot.radius = robot.computeLongSlipCompensation(
+            #             robot.ctrl_v, robot.ctrl_omega, robot.qd_des, constants)
 
             # # note there is only a ros_impedance controller, not a joint_group_vel controller, so I can only set velocity by integrating the wheel speed and
             # # senting it to be tracked from the impedance loop
-            robot.q_des = robot.q_des + robot.qd_des * conf.robot_params[robot.robot_name]['dt']
+            robot.q_des = robot.q_des + robot.qd_des * \
+                conf.robot_params[robot.robot_name]['dt']
 
             robot.send_des_jstate(robot.q_des, robot.qd_des, robot.tau_ffwd)
 
@@ -710,12 +658,20 @@ def talker(robots, trajectory):
 
 if __name__ == '__main__':
 
-    traj_viapoints = np.array([[-0.5, 0], [0, -1.5], [1.5, -2.5], [2.5, -1.5], [
-                              3.5, -1.5], [3.5, 2.5], [2.5, 3.5], [1.5, 2.4], [0.5, 1.6]])
+    traj_viapoints = np.array([[-4.5,  1.],
+                               [-2., -2.5],
+                               [-0.5, -3.5],
+                               [1.5, -2.5],
+                               [3.5,  1.],
+                               [2.5,  3.5],
+                               [1.,  4.5],
+                               [-0.5,  3.4],
+                               [-1.5,  2.5]])
+
     traj_t_tot = 50
     trajectory = LoopTrajectory(traj_viapoints, traj_t_tot)
 
-    n_tracktors = 5 # with more than 3 it gets crazy
+    n_tracktors = 5  # with more than 3 it gets crazy
     tracktors = []
 
     for i in range(n_tracktors):
