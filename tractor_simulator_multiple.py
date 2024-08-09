@@ -28,6 +28,7 @@ from numpy import nan
 import rospkg
 import os
 import params as conf
+import pandas as pd
 from base_controllers.utils.common_functions import plotFrameLinear, plotJoint, sendStaticTransform, launchFileGeneric, launchFileNode
 from base_controllers.base_controller import BaseController
 import rospy as ros
@@ -496,8 +497,11 @@ class GenericSimulator(BaseController):
         self.ros_pub.publishVisual(delete_markers=False)
         self.beta_l, self.beta_r, self.alpha, self.radius = self.estimateSlippages(
             self.baseTwistW, self.basePoseW[self.u.sp_crd["AZ"]], self.qd)
+
+        # this is for getting the slipage
+        return self.qd[0], self.qd[1], self.beta_l, self.beta_r, self.alpha
         # log variables
-        self.logData()
+        # self.logData()
 
     def getGPSReading(self):
         return self.basePoseW + self.noise_pose, self.baseTwistW + self.noise_twist
@@ -576,6 +580,7 @@ def generate_path_msg(trajectory):
 
 
 def talker(robots, trajectory):
+    global df
     # common stuff
 
     start_robots(robots, trajectory)
@@ -644,7 +649,20 @@ def talker(robots, trajectory):
             robot.q_des = robot.q_des + robot.qd_des * \
                 conf.robot_params[robot.robot_name]['dt']
 
-            robot.send_des_jstate(robot.q_des, robot.qd_des, robot.tau_ffwd)
+            wheel_l, wheel_r, beta_l, beta_r, alpha = robot.send_des_jstate(
+                robot.q_des, robot.qd_des, robot.tau_ffwd)
+            
+            # ignore first second due to incorect value
+            if time_global >= 0.5:
+                new_data = pd.DataFrame({
+                    'wheel_l': [wheel_l],
+                    'wheel_r': [wheel_r],
+                    'beta_l': [beta_l],
+                    'beta_r': [beta_r],
+                    'alpha': [alpha]
+                })
+
+                df = pd.concat([df, new_data], ignore_index=True)
 
         # wait for synconization of the control loop
         rate.sleep()
@@ -671,8 +689,11 @@ if __name__ == '__main__':
     traj_t_tot = 50
     trajectory = LoopTrajectory(traj_viapoints, traj_t_tot)
 
-    n_tracktors = 5  # with more than 3 it gets crazy
+    n_tracktors = 1  # with more than 3 it gets crazy
     tracktors = []
+
+    columns = ['wheel_l', 'wheel_r', 'beta_l', 'beta_r', 'alpha']
+    df = pd.DataFrame(columns=columns)
 
     for i in range(n_tracktors):
         tracktor = GenericSimulator(f"tractor{i}")
@@ -684,5 +705,8 @@ if __name__ == '__main__':
     ros.signal_shutdown("killed")
     for tracktor in tracktors:
         tracktor.deregister_node()
-    print(f"Plotting data of {tracktor.robot_name}")
-    tracktors[0].plotData()
+    # save data
+    df.to_csv('data/robot_data.csv', index=None, header=None)
+
+    # print(f"Plotting data of {tracktor.robot_name}")
+    # tracktors[0].plotData()
