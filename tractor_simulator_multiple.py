@@ -651,9 +651,9 @@ def talker(robots, trajectory):
 
             wheel_l, wheel_r, beta_l, beta_r, alpha = robot.send_des_jstate(
                 robot.q_des, robot.qd_des, robot.tau_ffwd)
-            
-            # ignore first second due to incorect value
-            if time_global >= 0.5:
+
+            # save data with low freq
+            if time_global % 0.5 == 0 and time_global > 0:
                 new_data = pd.DataFrame({
                     'wheel_l': [wheel_l],
                     'wheel_r': [wheel_r],
@@ -671,10 +671,11 @@ def talker(robots, trajectory):
             time_global + np.array([conf.global_dt]), 3)
 
         if np.mod(time_global, 1) == 0:
-            print(colored(f"TIME: { time_global}", "red"))
+            print(colored(f"TIME: {time_global}", "red"))
 
 
 if __name__ == '__main__':
+    data_path = f"{os.environ.get('LOCOSIM_DIR')}/robot_control/drp_course_2023/data"
 
     traj_viapoints = np.array([[-4.5,  1.],
                                [-2., -2.5],
@@ -689,7 +690,7 @@ if __name__ == '__main__':
     traj_t_tot = 50
     trajectory = LoopTrajectory(traj_viapoints, traj_t_tot)
 
-    n_tracktors = 1  # with more than 3 it gets crazy
+    n_tracktors = 5  # with more than 3 it gets crazy
     tracktors = []
 
     columns = ['wheel_l', 'wheel_r', 'beta_l', 'beta_r', 'alpha']
@@ -702,11 +703,12 @@ if __name__ == '__main__':
         talker(tracktors, trajectory)
     except (ros.ROSInterruptException, ros.service.ServiceException):
         pass
+    df.to_csv(f'{data_path}/robot_data.csv', index=None, header=None)
+    print('Data exported')
     ros.signal_shutdown("killed")
     for tracktor in tracktors:
         tracktor.deregister_node()
     # save data
-    df.to_csv('data/robot_data.csv', index=None, header=None)
 
     # print(f"Plotting data of {tracktor.robot_name}")
     # tracktors[0].plotData()
