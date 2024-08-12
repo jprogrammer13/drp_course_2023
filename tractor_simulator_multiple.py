@@ -673,21 +673,34 @@ def talker(robots, trajectory):
         if np.mod(time_global, 1) == 0:
             print(colored(f"TIME: {time_global}", "red"))
 
+def generate_circle_viapoints(radius, num_points):
+    # Generate angles evenly spaced around the circle
+    angles = np.linspace(0, 2 * np.pi, num_points, endpoint=False)
+    
+    # Calculate x and y coordinates for each angle
+    x_coords = radius * np.cos(angles)
+    y_coords = radius * np.sin(angles)
+    
+    # Combine x and y into a single array of shape (num_points, 2)
+    viapoints = np.column_stack((x_coords, y_coords))
+    
+    return viapoints
 
 if __name__ == '__main__':
     data_path = f"{os.environ.get('LOCOSIM_DIR')}/robot_control/drp_course_2023/data"
 
-    traj_viapoints = np.array([[-4.5,  1.],
-                               [-2., -2.5],
-                               [-0.5, -3.5],
-                               [1.5, -2.5],
-                               [3.5,  1.],
-                               [2.5,  3.5],
-                               [1.,  4.5],
-                               [-0.5,  3.4],
-                               [-1.5,  2.5]])
+    # traj_viapoints = np.array([[-4.5,  1.],
+    #                            [-2., -2.5],
+    #                            [-0.5, -3.5],
+    #                            [1.5, -2.5],
+    #                            [3.5,  1.],
+    #                            [2.5,  3.5],
+    #                            [1.,  4.5],
+    #                            [-0.5,  3.4],
+    #                            [-1.5,  2.5]])
 
-    traj_t_tot = 50
+    traj_viapoints = generate_circle_viapoints(3, 20)
+    traj_t_tot = 30
     trajectory = LoopTrajectory(traj_viapoints, traj_t_tot)
 
     n_tracktors = 5  # with more than 3 it gets crazy
