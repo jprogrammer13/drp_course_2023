@@ -34,6 +34,11 @@ from base_controllers.utils.common_functions import plotFrameLinear, plotJoint, 
 from base_controllers.base_controller import BaseController
 import rospy as ros
 from base_controllers.utils.math_tools import *
+import rospy
+import numpy as np
+from nav_msgs.msg import OccupancyGrid, MapMetaData
+from geometry_msgs.msg import Pose
+from std_msgs.msg import Header
 
 from nav_msgs.msg import Path
 from geometry_msgs.msg import PoseStamped
@@ -216,7 +221,7 @@ class GenericSimulator(BaseController):
 
         # groundParams = Ground()
         self.tracked_vehicle_simulator = TrackedVehicleSimulator(
-            dt=conf.robot_params[self.robot_name]['dt'])#, ground=groundParams)
+            dt=conf.robot_params[self.robot_name]['dt'])  # , ground=groundParams)
         self.tracked_vehicle_simulator.initSimulation(vbody_init=np.array([0, 0, 0.0]),
                                                       pose_init=self.pose_init)
 
@@ -541,12 +546,12 @@ def start_robots(robots, trajectory, groundMap):
     t = 0
 
     for robot in robots:
-        t += np.random.randint(10, 15)
+        t += np.random.randint(2, 5)
         robot.t_start = t
 
         x, y, robot.old_theta, _, _, _, _ = trajectory.eval_trajectory(
             robot.t_start)
-        
+
         print(
             f"robot: {robot.robot_name}, t_start: {robot.t_start} x: {x} y: {y} yaw: {robot.old_theta}")
         robot.set_pose_init(x, y, robot.old_theta)
@@ -554,9 +559,9 @@ def start_robots(robots, trajectory, groundMap):
         robot.start()
         robot.startSimulator()
 
-        ground = groundMap.get_ground(x,y)
+        ground = groundMap.get_ground(x, y)
         robot.tracked_vehicle_simulator.setGround(ground)
-        
+
         robot.initVars()
         robot.startupProcedure()
         robot.robot_state = Robot()
@@ -585,7 +590,45 @@ def generate_path_msg(trajectory):
     return path_msg
 
 
-def talker(robots, trajectory, groundMap):
+def generate_grid_msg(groundMap, data_path):
+    friction_coeff_matrix = np.array([[groundMap.map[i][j].friction_coefficient for j in range(
+        groundMap.width)] for i in range(groundMap.height)])
+
+    plt.matshow(friction_coeff_matrix, vmin=0.05, vmax=0.2, cmap='Greys_r')
+    plt.colorbar()
+    plt.savefig(f'{data_path}/grid_friction.png')
+
+    # Normalize friction coefficients to the range 0-100 for OccupancyGrid (0-100 indicates probability, -1 is unknown)
+    normalized_friction = (friction_coeff_matrix *
+                           100).astype(np.int8).flatten()
+
+    # Create the OccupancyGrid message
+    grid_msg = OccupancyGrid()
+
+    # Set up the header
+    grid_msg.header = Header()
+    grid_msg.header.stamp = rospy.Time.now()
+    grid_msg.header.frame_id = "world"
+    # Set up the info
+    grid_msg.info = MapMetaData()
+    grid_msg.info.resolution = 1.0  # Each grid cell is 1x1 meter, adjust as necessary
+    grid_msg.info.width = groundMap.width
+    grid_msg.info.height = groundMap.height
+
+    # Set the origin of the grid map
+    grid_msg.info.origin = Pose()
+    grid_msg.info.origin.position.x = groundMap.x_min
+    grid_msg.info.origin.position.y = groundMap.y_min
+    grid_msg.info.origin.position.z = 0
+    grid_msg.info.origin.orientation.w = 1.0
+
+    # Set the data
+    grid_msg.data = normalized_friction.tolist()
+
+    return grid_msg
+
+
+def talker(robots, trajectory, groundMap, data_path):
     global df
     # common stuff
 
@@ -595,6 +638,10 @@ def talker(robots, trajectory, groundMap):
 
     path_pub = ros.Publisher('/trajectory_path', Path, queue_size=10)
     path_msg = generate_path_msg(trajectory)
+
+    grid_pub = rospy.Publisher(
+        "/ground_friction_grid", OccupancyGrid, queue_size=10)
+    grid_msg = generate_grid_msg(groundMap, data_path)
 
     slow_down_factor = 1
     # loop frequency
@@ -616,6 +663,7 @@ def talker(robots, trajectory, groundMap):
     while not ros.is_shutdown():
 
         path_pub.publish(path_msg)
+        grid_pub.publish(grid_msg)
 
         for robot in robots:
 
@@ -628,8 +676,11 @@ def talker(robots, trajectory, groundMap):
 
             # update the ground according on the position
 
-            ground = groundMap.get_ground(robot.robot_state.x,robot.robot_state.y)
+            ground = groundMap.get_ground(
+                robot.robot_state.x, robot.robot_state.y)
             robot.tracked_vehicle_simulator.setGround(ground)
+
+            i, j = groundMap.coords_to_index(robot.robot_state.x, robot.robot_state.y)
 
             robot.des_x, robot.des_y, robot.des_theta, robot.v_d, robot.omega_d, robot.v_dot_d, robot.omega_dot_d = trajectory.eval_trajectory(
                 robot.time + robot.t_start)
@@ -670,7 +721,9 @@ def talker(robots, trajectory, groundMap):
                     'wheel_r': [wheel_r],
                     'beta_l': [beta_l],
                     'beta_r': [beta_r],
-                    'alpha': [alpha]
+                    'alpha': [alpha],
+                    'i' : [i],
+                    'j' : [j],
                 })
 
                 df = pd.concat([df, new_data], ignore_index=True)
@@ -684,18 +737,20 @@ def talker(robots, trajectory, groundMap):
         if np.mod(time_global, 1) == 0:
             print(colored(f"TIME: {time_global}", "red"))
 
+
 def generate_circle_viapoints(radius, num_points):
     # Generate angles evenly spaced around the circle
     angles = np.linspace(0, 2 * np.pi, num_points, endpoint=False)
-    
+
     # Calculate x and y coordinates for each angle
     x_coords = radius * np.cos(angles)
     y_coords = radius * np.sin(angles)
-    
+
     # Combine x and y into a single array of shape (num_points, 2)
     viapoints = np.column_stack((x_coords, y_coords))
-    
+
     return viapoints
+
 
 if __name__ == '__main__':
     data_path = f"{os.environ.get('LOCOSIM_DIR')}/robot_control/drp_course_2023/data"
@@ -710,8 +765,8 @@ if __name__ == '__main__':
     #                            [-0.5,  3.4],
     #                            [-1.5,  2.5]])
 
-    groundMap = GroundMap(5,5)
-    traj_viapoints = generate_circle_viapoints(2, 20)
+    groundMap = GroundMap(6, 6)
+    traj_viapoints = generate_circle_viapoints(2.5, 20)
     traj_t_tot = 30
     trajectory = LoopTrajectory(traj_viapoints, traj_t_tot)
 
@@ -725,7 +780,7 @@ if __name__ == '__main__':
         tracktor = GenericSimulator(f"tractor{i}")
         tracktors.append(tracktor)
     try:
-        talker(tracktors, trajectory, groundMap)
+        talker(tracktors, trajectory, groundMap, data_path)
     except (ros.ROSInterruptException, ros.service.ServiceException):
         pass
     df.to_csv(f'{data_path}/robot_data.csv', index=None, header=None)
