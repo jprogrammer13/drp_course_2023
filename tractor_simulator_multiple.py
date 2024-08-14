@@ -7,6 +7,7 @@ Created on Fri Nov  2 16:52:08 2018
 
 from __future__ import print_function
 from trajectory import LoopTrajectory
+from groundmap import GroundMap
 from base_controllers.utils.common_functions import checkRosMaster
 from base_controllers.utils.common_functions import getRobotModelFloating
 from base_controllers.tracked_robot.simulator.tracked_vehicle_simulator import TrackedVehicleSimulator, Ground
@@ -212,9 +213,10 @@ class GenericSimulator(BaseController):
 
         # run robot state publisher + load robot description + rviz
         # launchFileGeneric(rospkg.RosPack().get_path('tractor_description') + "/launch/multiple_robots.launch")
-        groundParams = Ground()
+
+        # groundParams = Ground()
         self.tracked_vehicle_simulator = TrackedVehicleSimulator(
-            dt=conf.robot_params[self.robot_name]['dt'], ground=groundParams)
+            dt=conf.robot_params[self.robot_name]['dt'])#, ground=groundParams)
         self.tracked_vehicle_simulator.initSimulation(vbody_init=np.array([0, 0, 0.0]),
                                                       pose_init=self.pose_init)
 
@@ -525,7 +527,7 @@ class GenericSimulator(BaseController):
         odom_publisher.publish(msg)
 
 
-def start_robots(robots, trajectory):
+def start_robots(robots, trajectory, groundMap):
     # launch roscore
     checkRosMaster()
     launchFileGeneric(rospkg.RosPack().get_path(
@@ -544,13 +546,17 @@ def start_robots(robots, trajectory):
 
         x, y, robot.old_theta, _, _, _, _ = trajectory.eval_trajectory(
             robot.t_start)
+        
         print(
             f"robot: {robot.robot_name}, t_start: {robot.t_start} x: {x} y: {y} yaw: {robot.old_theta}")
-
         robot.set_pose_init(x, y, robot.old_theta)
 
         robot.start()
         robot.startSimulator()
+
+        ground = groundMap.get_ground(x,y)
+        robot.tracked_vehicle_simulator.setGround(ground)
+        
         robot.initVars()
         robot.startupProcedure()
         robot.robot_state = Robot()
@@ -579,11 +585,11 @@ def generate_path_msg(trajectory):
     return path_msg
 
 
-def talker(robots, trajectory):
+def talker(robots, trajectory, groundMap):
     global df
     # common stuff
 
-    start_robots(robots, trajectory)
+    start_robots(robots, trajectory, groundMap)
     # debug
     # robots[0].set_pose_init(0,0,0)
 
@@ -619,6 +625,11 @@ def talker(robots, trajectory):
             robot.robot_state.y = robot.basePoseW[robot.u.sp_crd["LY"]]
             robot.robot_state.theta = robot.basePoseW[robot.u.sp_crd["AZ"]]
             # print(f"pos X: {robot.x} Y: {robot.y} th: {robot.theta}")
+
+            # update the ground according on the position
+
+            ground = groundMap.get_ground(robot.robot_state.x,robot.robot_state.y)
+            robot.tracked_vehicle_simulator.setGround(ground)
 
             robot.des_x, robot.des_y, robot.des_theta, robot.v_d, robot.omega_d, robot.v_dot_d, robot.omega_dot_d = trajectory.eval_trajectory(
                 robot.time + robot.t_start)
@@ -699,7 +710,8 @@ if __name__ == '__main__':
     #                            [-0.5,  3.4],
     #                            [-1.5,  2.5]])
 
-    traj_viapoints = generate_circle_viapoints(3, 20)
+    groundMap = GroundMap(5,5)
+    traj_viapoints = generate_circle_viapoints(2, 20)
     traj_t_tot = 30
     trajectory = LoopTrajectory(traj_viapoints, traj_t_tot)
 
@@ -713,7 +725,7 @@ if __name__ == '__main__':
         tracktor = GenericSimulator(f"tractor{i}")
         tracktors.append(tracktor)
     try:
-        talker(tracktors, trajectory)
+        talker(tracktors, trajectory, groundMap)
     except (ros.ROSInterruptException, ros.service.ServiceException):
         pass
     df.to_csv(f'{data_path}/robot_data.csv', index=None, header=None)
