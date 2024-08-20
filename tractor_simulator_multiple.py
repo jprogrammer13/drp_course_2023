@@ -251,6 +251,7 @@ class GenericSimulator(BaseController):
         if conf.plotting:
             # xy plot
             plt.figure()
+            plt.title(f'{self.robot_name}')
             plt.plot(self.des_state_log[0, :],
                      self.des_state_log[1, :], "-r", label="desired")
             plt.plot(self.state_log[0, :],
@@ -261,9 +262,10 @@ class GenericSimulator(BaseController):
             plt.axis("equal")
             plt.grid(True)
 
-            # # command plot
+            # desired command plot
             plt.figure()
             plt.subplot(2, 1, 1)
+            plt.title(f'{self.robot_name}')
             plt.plot(self.time_log, self.ctrl_v_log, "-b", label="REAL")
             plt.plot(self.time_log, self.v_d_log, "-r", label="desired")
             plt.legend()
@@ -277,10 +279,12 @@ class GenericSimulator(BaseController):
             plt.ylabel("angular velocity[rad/s]")
             plt.grid(True)
 
+
             # plotJoint('position', self.time_log, q_log=self.q_log, q_des_log=self.q_des_log, joint_names=self.joint_names)
             # joint velocities with limits
             plt.figure()
             plt.subplot(2, 1, 1)
+            plt.title(f'{self.robot_name}')
             plt.plot(self.time_log, self.qd_log[0, :], "-b",  linewidth=3)
             plt.plot(self.time_log, self.qd_des_log[0, :], "-r",  linewidth=4)
             plt.plot(self.time_log, constants.MAXSPEED_RADS_PULLEY *
