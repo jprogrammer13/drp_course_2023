@@ -59,6 +59,7 @@ class GenericSimulator(BaseController):
         self.ControlType = 'CLOSED_LOOP_UNICYCLE'
         self.SAVE_BAGS = False
         self.LONG_SLIP_COMPENSATION = 'NONE'  # 'NN', 'EXP', 'NONE'
+        self.DEBUG = True
         self.t_start = 0.0
         self.pose_init = None
 
@@ -554,7 +555,10 @@ def start_robots(robots, trajectory, groundMap):
     t = 0
 
     for robot in robots:
-        t += np.random.randint(2, 5)
+        if robot.DEBUG:
+            t += 1 
+        else:
+            t +=  np.random.randint(2, 5)
         robot.t_start = t
 
         x, y, robot.old_theta, _, _, _, _ = trajectory.eval_trajectory(
@@ -682,10 +686,13 @@ def talker(robots, trajectory, groundMap, data_path):
             robot.robot_state.theta = robot.basePoseW[robot.u.sp_crd["AZ"]]
             # print(f"pos X: {robot.x} Y: {robot.y} th: {robot.theta}")
 
-            # update the ground according on the position
-
-            ground = groundMap.get_ground(
-                robot.robot_state.x, robot.robot_state.y)
+            # DEBUG uniform friction coeff
+            if robot.DEBUG:
+                ground = Ground()
+            else:
+                #update the ground according on the position
+                ground = groundMap.get_ground(
+                    robot.robot_state.x, robot.robot_state.y)
             robot.tracked_vehicle_simulator.setGround(ground)
 
             i, j = groundMap.coords_to_index(robot.robot_state.x, robot.robot_state.y)
@@ -775,7 +782,7 @@ if __name__ == '__main__':
 
     groundMap = GroundMap(6, 6)
     traj_viapoints = generate_circle_viapoints(2.5, 20)
-    traj_t_tot = 30
+    traj_t_tot = 60
     trajectory = LoopTrajectory(traj_viapoints, traj_t_tot)
 
     n_tracktors = 5  # with more than 3 it gets crazy
