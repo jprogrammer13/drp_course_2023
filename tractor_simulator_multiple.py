@@ -508,11 +508,12 @@ class GenericSimulator(BaseController):
         self.ros_pub.publishVisual(delete_markers=False)
         self.beta_l, self.beta_r, self.alpha, self.radius = self.estimateSlippages(
             self.baseTwistW, self.basePoseW[self.u.sp_crd["AZ"]], self.qd)
+        # log variables
+        self.logData()
 
         # this is for getting the slipage
         return self.qd[0], self.qd[1], self.beta_l, self.beta_r, self.alpha
-        # log variables
-        # self.logData()
+
 
     def getGPSReading(self):
         return self.basePoseW + self.noise_pose, self.baseTwistW + self.noise_twist
