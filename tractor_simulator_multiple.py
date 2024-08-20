@@ -59,7 +59,7 @@ class GenericSimulator(BaseController):
         self.ControlType = 'CLOSED_LOOP_UNICYCLE'
         self.SAVE_BAGS = False
         self.LONG_SLIP_COMPENSATION = 'NONE'  # 'NN', 'EXP', 'NONE'
-        self.DEBUG = True
+        self.DEBUG = False
         self.t_start = 0.0
         self.pose_init = None
 
