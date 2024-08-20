@@ -280,7 +280,6 @@ class GenericSimulator(BaseController):
             plt.ylabel("angular velocity[rad/s]")
             plt.grid(True)
 
-
             # plotJoint('position', self.time_log, q_log=self.q_log, q_des_log=self.q_des_log, joint_names=self.joint_names)
             # joint velocities with limits
             plt.figure()
@@ -304,9 +303,8 @@ class GenericSimulator(BaseController):
             plt.ylabel("WHEEL_R")
             plt.grid(True)
 
-
             # states plot
-            #base position
+            # base position
             plotFrameLinear(name='position', title=f'{self.robot_name}', time_log=self.time_log,
                             des_Pose_log=self.des_state_log, Pose_log=self.state_log)
             # base velocity
@@ -518,7 +516,6 @@ class GenericSimulator(BaseController):
         # this is for getting the slipage
         return self.qd[0], self.qd[1], self.beta_l, self.beta_r, self.alpha
 
-
     def getGPSReading(self):
         return self.basePoseW + self.noise_pose, self.baseTwistW + self.noise_twist
 
@@ -556,9 +553,9 @@ def start_robots(robots, trajectory, groundMap):
 
     for robot in robots:
         if robot.DEBUG:
-            t += 1 
+            t += 1
         else:
-            t +=  np.random.randint(2, 5)
+            t += np.random.randint(5, 10)
         robot.t_start = t
 
         x, y, robot.old_theta, _, _, _, _ = trajectory.eval_trajectory(
@@ -573,6 +570,8 @@ def start_robots(robots, trajectory, groundMap):
 
         ground = groundMap.get_ground(x, y)
         robot.tracked_vehicle_simulator.setGround(ground)
+        # DEBUG
+        # robot.tracked_vehicle_simulator.NO_SLIPPAGE = True
 
         robot.initVars()
         robot.startupProcedure()
@@ -690,12 +689,13 @@ def talker(robots, trajectory, groundMap, data_path):
             if robot.DEBUG:
                 ground = Ground()
             else:
-                #update the ground according on the position
+                # update the ground according on the position
                 ground = groundMap.get_ground(
                     robot.robot_state.x, robot.robot_state.y)
             robot.tracked_vehicle_simulator.setGround(ground)
 
-            i, j = groundMap.coords_to_index(robot.robot_state.x, robot.robot_state.y)
+            i, j = groundMap.coords_to_index(
+                robot.robot_state.x, robot.robot_state.y)
 
             robot.des_x, robot.des_y, robot.des_theta, robot.v_d, robot.omega_d, robot.v_dot_d, robot.omega_dot_d = trajectory.eval_trajectory(
                 robot.time + robot.t_start)
@@ -737,8 +737,8 @@ def talker(robots, trajectory, groundMap, data_path):
                     'beta_l': [beta_l],
                     'beta_r': [beta_r],
                     'alpha': [alpha],
-                    'i' : [i],
-                    'j' : [j],
+                    'i': [i],
+                    'j': [j],
                 })
 
                 df = pd.concat([df, new_data], ignore_index=True)
@@ -782,7 +782,7 @@ if __name__ == '__main__':
 
     groundMap = GroundMap(6, 6)
     traj_viapoints = generate_circle_viapoints(2.5, 20)
-    traj_t_tot = 60
+    traj_t_tot = 50
     trajectory = LoopTrajectory(traj_viapoints, traj_t_tot)
 
     n_tracktors = 5  # with more than 3 it gets crazy
@@ -803,8 +803,5 @@ if __name__ == '__main__':
     ros.signal_shutdown("killed")
     for tracktor in tracktors:
         tracktor.deregister_node()
-    # save data
-
-    # print(f"Plotting data of {tracktor.robot_name}")
-    for i in range(n_tracktors):
-        tracktors[i].plotData()
+        # if tracktor.DEBUG:
+        tracktor.plotData()
