@@ -369,12 +369,14 @@ class GenericSimulator(BaseController):
 
     def estimateSlippages(self, W_baseTwist, theta, qd):
 
-        wheel_L = qd[0]
-        wheel_R = qd[1]
+        wheel_L = qd[0] + np.random.normal()*1e-4
+        wheel_R = qd[1] + np.random.normal()*1e-4
         w_vel_xy = np.zeros(2)
-        w_vel_xy[0] = W_baseTwist[self.u.sp_crd["LX"]]
-        w_vel_xy[1] = W_baseTwist[self.u.sp_crd["LY"]]
-        omega = W_baseTwist[self.u.sp_crd["AZ"]]
+        w_vel_xy[0] = W_baseTwist[self.u.sp_crd["LX"]] + \
+            (np.random.normal()*1e-4)
+        w_vel_xy[1] = W_baseTwist[self.u.sp_crd["LY"]] + \
+            (np.random.normal()*1e-4)
+        omega = W_baseTwist[self.u.sp_crd["AZ"]] + (np.random.normal()*1e-4)
 
         # compute BF velocity
         w_R_b = np.array([[np.cos(theta), -np.sin(theta)],
@@ -784,7 +786,7 @@ if __name__ == '__main__':
                                [-1.5,  2.5]])
 
     # traj_viapoints = generate_circle_viapoints(2.5, 20)
-    traj_t_tot = 50
+    traj_t_tot = 40
     trajectory = LoopTrajectory(traj_viapoints, traj_t_tot)
 
     n_tracktors = 5  # with more than 3 it gets crazy
