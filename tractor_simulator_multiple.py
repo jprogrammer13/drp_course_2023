@@ -59,7 +59,7 @@ class GenericSimulator(BaseController):
         self.ControlType = 'CLOSED_LOOP_UNICYCLE'
         self.SAVE_BAGS = False
         self.LONG_SLIP_COMPENSATION = 'NONE'  # 'NN', 'EXP', 'NONE'
-        self.DEBUG = False
+        self.DEBUG = True
         self.t_start = 0.0
         self.pose_init = None
 
@@ -225,6 +225,14 @@ class GenericSimulator(BaseController):
             dt=conf.robot_params[self.robot_name]['dt'])  # , ground=groundParams)
         self.tracked_vehicle_simulator.initSimulation(vbody_init=np.array([0, 0, 0.0]),
                                                       pose_init=self.pose_init)
+        
+        print("init simulation 1",self.basePoseW)
+        
+        self.basePoseW[self.u.sp_crd["LX"]] = self.pose_init[0]
+        self.basePoseW[self.u.sp_crd["LY"]] = self.pose_init[1]
+        self.basePoseW[self.u.sp_crd["AZ"]] = self.pose_init[2]
+
+        print("init simulation 2",self.basePoseW)
 
         # instantiating additional publishers
         self.joint_pub = ros.Publisher(
@@ -567,6 +575,7 @@ def start_robots(robots, trajectory, groundMap):
             f"robot: {robot.robot_name}, t_start: {robot.t_start} x: {x} y: {y} yaw: {robot.old_theta}")
         robot.set_pose_init(x, y, robot.old_theta)
 
+        robot.initVars()
         robot.start()
         robot.startSimulator()
 
@@ -575,13 +584,11 @@ def start_robots(robots, trajectory, groundMap):
         # DEBUG
         # robot.tracked_vehicle_simulator.NO_SLIPPAGE = True
 
-        robot.initVars()
         robot.startupProcedure()
         robot.robot_state = Robot()
 
         # Lyapunov controller parameters
         robot.controller = LyapunovController(params=params)
-
 
 def generate_path_msg(trajectory):
 
@@ -606,6 +613,8 @@ def generate_path_msg(trajectory):
 def generate_grid_msg(groundMap, data_path):
     friction_coeff_matrix = np.array([[groundMap.map[i][j].friction_coefficient for j in range(
         groundMap.width)] for i in range(groundMap.height)])
+    
+    print(friction_coeff_matrix)
 
     plt.matshow(friction_coeff_matrix, vmin=0.05, vmax=0.2, cmap='Greys_r')
     plt.colorbar()
@@ -673,6 +682,7 @@ def talker(robots, trajectory, groundMap, data_path):
     # robots[0].traj.set_initial_time(start_time=time_global)
 
     # CLOSE loop control
+    i = 0
     while not ros.is_shutdown():
 
         path_pub.publish(path_msg)
@@ -712,6 +722,8 @@ def talker(robots, trajectory, groundMap, data_path):
             if robot.ControlType == 'CLOSED_LOOP_UNICYCLE':
                 robot.ctrl_v, robot.ctrl_omega, robot.V, robot.V_dot = robot.controller.control_unicycle(
                     robot.robot_state, robot.time, robot.des_x, robot.des_y, robot.des_theta, robot.v_d, robot.omega_d, False)
+                
+            print(robot.ctrl_omega)
 
             robot.qd_des = robot.mapToWheels(robot.ctrl_v, robot.ctrl_omega)
 
@@ -753,6 +765,11 @@ def talker(robots, trajectory, groundMap, data_path):
 
         if np.mod(time_global, 1) == 0:
             print(colored(f"TIME: {time_global}", "red"))
+        
+        # if i == 2:
+        #     break
+
+        # i+=1
 
 
 def generate_circle_viapoints(radius, num_points):
@@ -786,7 +803,7 @@ if __name__ == '__main__':
                                [-1.5,  2.5]])
 
     # traj_viapoints = generate_circle_viapoints(2.5, 20)
-    traj_t_tot = 40
+    traj_t_tot = 50
     trajectory = LoopTrajectory(traj_viapoints, traj_t_tot)
 
     n_tracktors = 5  # with more than 3 it gets crazy
