@@ -770,18 +770,20 @@ def generate_circle_viapoints(radius, num_points):
 if __name__ == '__main__':
     data_path = f"{os.environ.get('LOCOSIM_DIR')}/robot_control/drp_course_2023/data"
 
-    # traj_viapoints = np.array([[-4.5,  1.],
-    #                            [-2., -2.5],
-    #                            [-0.5, -3.5],
-    #                            [1.5, -2.5],
-    #                            [3.5,  1.],
-    #                            [2.5,  3.5],
-    #                            [1.,  4.5],
-    #                            [-0.5,  3.4],
-    #                            [-1.5,  2.5]])
+    groundMap = GroundMap(10, 10)
+    # groundMap = GroundMap(6, 6)
 
-    groundMap = GroundMap(6, 6)
-    traj_viapoints = generate_circle_viapoints(2.5, 20)
+    traj_viapoints = np.array([[-4.5,  1.],
+                               [-2., -2.5],
+                               [-0.5, -3.5],
+                               [1.5, -2.5],
+                               [3.5,  1.],
+                               [2.5,  3.5],
+                               [1.,  4.5],
+                               [-0.5,  3.4],
+                               [-1.5,  2.5]])
+
+    # traj_viapoints = generate_circle_viapoints(2.5, 20)
     traj_t_tot = 50
     trajectory = LoopTrajectory(traj_viapoints, traj_t_tot)
 
@@ -803,5 +805,5 @@ if __name__ == '__main__':
     ros.signal_shutdown("killed")
     for tracktor in tracktors:
         tracktor.deregister_node()
-        # if tracktor.DEBUG:
-        tracktor.plotData()
+        if tracktor.DEBUG:
+            tracktor.plotData()
