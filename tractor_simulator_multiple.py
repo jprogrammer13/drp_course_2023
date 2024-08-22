@@ -6,8 +6,6 @@ Created on Fri Nov  2 16:52:08 2018
 """
 
 from __future__ import print_function
-from trajectory import LoopTrajectory
-from groundmap import GroundMap
 from base_controllers.utils.common_functions import checkRosMaster
 from base_controllers.utils.common_functions import getRobotModelFloating
 from base_controllers.tracked_robot.simulator.tracked_vehicle_simulator import TrackedVehicleSimulator, Ground
@@ -42,6 +40,11 @@ from std_msgs.msg import Header
 
 from nav_msgs.msg import Path
 from geometry_msgs.msg import PoseStamped
+
+# custom lib
+from trajectory import LoopTrajectory
+from groundmap import GroundMap
+from wls_estimator import *
 
 np.set_printoptions(threshold=np.inf, precision=5,
                     linewidth=1000, suppress=True)
@@ -162,8 +165,6 @@ class GenericSimulator(BaseController):
         # wls variables
         self.data = pd.DataFrame(
             columns=['wheel_l', 'wheel_r', 'beta_l', 'beta_r', 'alpha', 'i', 'j'])
-        
-        self.
 
     def logData(self):
         if (self.log_counter < conf.robot_params[self.robot_name]['buffer_size']):
@@ -251,111 +252,173 @@ class GenericSimulator(BaseController):
         self.basePoseW[2] = conf.robot_params[self.robot_name]['spawn_z']
 
     def plotData(self):
-        if conf.plotting:
-            # xy plot
-            plt.figure()
-            plt.title(f'{self.robot_name}')
-            plt.plot(self.des_state_log[0, :],
-                     self.des_state_log[1, :], "-r", label="desired")
-            plt.plot(self.state_log[0, :],
-                     self.state_log[1, :], "-b", label="real")
-            plt.legend()
-            plt.xlabel("x[m]")
-            plt.ylabel("y[m]")
-            plt.axis("equal")
-            plt.grid(True)
 
-            # desired command plot
-            plt.figure()
-            plt.subplot(2, 1, 1)
-            plt.title(f'{self.robot_name}')
-            plt.plot(self.time_log, self.ctrl_v_log, "-b", label="REAL")
-            plt.plot(self.time_log, self.v_d_log, "-r", label="desired")
-            plt.legend()
-            plt.ylabel("linear velocity[m/s]")
-            plt.grid(True)
-            plt.subplot(2, 1, 2)
-            plt.plot(self.time_log, self.ctrl_omega_log, "-b", label="REAL")
-            plt.plot(self.time_log, self.omega_d_log, "-r", label="desired")
-            plt.legend()
-            plt.xlabel("time[sec]")
-            plt.ylabel("angular velocity[rad/s]")
-            plt.grid(True)
+        filtered = self.data[(self.data.i == 0) & (self.data.j == 1)]
+        omega_l = filtered.wheel_l.values
+        omega_r = filtered.wheel_r.values
+        beta_l = filtered.beta_l.values
+        beta_r = filtered.beta_r.values
+        alpha = filtered.alpha.values
 
-            # plotJoint('position', self.time_log, q_log=self.q_log, q_des_log=self.q_des_log, joint_names=self.joint_names)
-            # joint velocities with limits
-            plt.figure()
-            plt.subplot(2, 1, 1)
-            plt.title(f'{self.robot_name}')
-            plt.plot(self.time_log, self.qd_log[0, :], "-b",  linewidth=3)
-            plt.plot(self.time_log, self.qd_des_log[0, :], "-r",  linewidth=4)
-            plt.plot(self.time_log, constants.MAXSPEED_RADS_PULLEY *
-                     np.ones((len(self.time_log))), "-k",  linewidth=4)
-            plt.plot(self.time_log, -constants.MAXSPEED_RADS_PULLEY *
-                     np.ones((len(self.time_log))), "-k",  linewidth=4)
-            plt.ylabel("WHEEL_L")
-            plt.grid(True)
-            plt.subplot(2, 1, 2)
-            plt.plot(self.time_log, self.qd_log[1, :], "-b",  linewidth=3)
-            plt.plot(self.time_log, self.qd_des_log[1, :], "-r",  linewidth=4)
-            plt.plot(self.time_log, constants.MAXSPEED_RADS_PULLEY *
-                     np.ones((len(self.time_log))), "-k",  linewidth=4)
-            plt.plot(self.time_log, -constants.MAXSPEED_RADS_PULLEY *
-                     np.ones((len(self.time_log))), "-k",  linewidth=4)
-            plt.ylabel("WHEEL_R")
-            plt.grid(True)
+        # Extract coefficients from WLS estimation
+        # Coefficients for beta_l
+        theta_0_l, theta_1_l, theta_2_l = self.beta_hat_wls[:, 0]
+        # Coefficients for beta_r
+        theta_0_r, theta_1_r, theta_2_r = self.beta_hat_wls[:, 1]
+        # Coefficients for alpha
+        theta_0_alpha, theta_1_alpha, theta_2_alpha = self.beta_hat_wls[:, 2]
 
-            # states plot
-            # base position
-            plotFrameLinear(name='position', title=f'{self.robot_name}', time_log=self.time_log,
-                            des_Pose_log=self.des_state_log, Pose_log=self.state_log)
-            # base velocity
-            plotFrameLinear(name='velocity', title=f'{self.robot_name}', time_log=self.time_log, Twist_log=np.vstack(
-                (self.baseTwistW_log[:2, :], self.baseTwistW_log[5, :])))
+        # Create a grid of values for omega_l and omega_r
+        omega_l_grid, omega_r_grid = np.meshgrid(np.linspace(omega_l.min(), omega_l.max(), 100),
+                                                 np.linspace(omega_r.min(), omega_r.max(), 100))
 
-            # slippage vars
-            # plt.figure()
-            # plt.subplot(4, 1, 1)
-            # plt.plot(self.time_log, self.beta_l_log, "-b", label="real")
-            # plt.plot(self.time_log, self.beta_l_control_log,
-            #          "-r", label="control")
-            # plt.ylabel("beta_l")
-            # plt.legend()
-            # plt.grid(True)
-            # plt.subplot(4, 1, 2)
-            # plt.plot(self.time_log, self.beta_r_log, "-b", label="real")
-            # plt.plot(self.time_log, self.beta_r_control_log,
-            #          "-r", label="control")
-            # plt.ylabel("beta_r")
-            # plt.legend()
-            # plt.grid(True)
-            # plt.subplot(4, 1, 3)
-            # plt.plot(self.time_log, self.alpha_log, "-b", label="real")
-            # plt.plot(self.time_log, self.alpha_control_log,
-            #          "-r", label="control")
-            # plt.ylabel("alpha")
-            # plt.ylim([-1, 1])
-            # plt.grid(True)
-            # plt.legend()
-            # plt.subplot(4, 1, 4)
-            # plt.plot(self.time_log, self.radius_log, "-b")
-            # plt.ylim([-10, 10])
-            # plt.ylabel("radius")
-            # plt.grid(True)
-            #
-            # if self.ControlType == 'CLOSED_LOOP':
-            #     # tracking errors
-            #     self.log_e_x, self.log_e_y, self.log_e_theta = self.controller.getErrors()
-            #     plt.figure()
-            #     plt.subplot(2, 1, 1)
-            #     plt.plot(np.sqrt(np.power(self.log_e_x, 2) +
-            #              np.power(self.log_e_y, 2)), "-b")
-            #     plt.ylabel("exy")
-            #     plt.grid(True)
-            #     plt.subplot(2, 1, 2)
-            #     plt.plot(self.log_e_theta, "-b")
-            #     plt.ylabel("eth")
-            #     plt.grid(True)
+        # Calculate the corresponding beta_l, beta_r, and alpha values on the grid
+        beta_l_grid = theta_0_l + theta_1_l * omega_l_grid + theta_2_l * omega_r_grid
+        beta_r_grid = theta_0_r + theta_1_r * omega_l_grid + theta_2_r * omega_r_grid
+        alpha_grid = theta_0_alpha + theta_1_alpha * \
+            omega_l_grid + theta_2_alpha * omega_r_grid
+
+        fig = plt.figure(figsize=(18, 6))
+
+        # Beta_l surface
+        ax = fig.add_subplot(131, projection='3d')
+        ax.plot_surface(omega_l_grid, omega_r_grid,
+                        beta_l_grid, cmap="viridis", alpha=0.7)
+        # Original data points
+        ax.scatter(omega_l, omega_r, beta_l, color='red')
+        ax.set_title('Beta_l vs Wheel_l and Wheel_r')
+        ax.set_xlabel('Wheel_l')
+        ax.set_ylabel('Wheel_r')
+        ax.set_zlabel('Beta_l')
+
+        # Beta_r surface
+        ax = fig.add_subplot(132, projection='3d')
+        ax.plot_surface(omega_l_grid, omega_r_grid,
+                        beta_r_grid, cmap="viridis", alpha=0.7)
+        # Original data points
+        ax.scatter(omega_l, omega_r, beta_r, color='red')
+        ax.set_title('Beta_r vs Wheel_l and Wheel_r')
+        ax.set_xlabel('Wheel_l')
+        ax.set_ylabel('Wheel_r')
+        ax.set_zlabel('Beta_r')
+
+        # Alpha surface
+        ax = fig.add_subplot(133, projection='3d')
+        ax.plot_surface(omega_l_grid, omega_r_grid,
+                        alpha_grid, cmap="viridis", alpha=0.7)
+        # Original data points
+        ax.scatter(omega_l, omega_r, alpha, color='red')
+        ax.set_title('Alpha vs Wheel_l and Wheel_r')
+        ax.set_xlabel('Wheel_l')
+        ax.set_ylabel('Wheel_r')
+        ax.set_zlabel('Alpha')
+
+        plt.show()
+        # if conf.plotting:
+        #     # xy plot
+        #     plt.figure()
+        #     plt.title(f'{self.robot_name}')
+        #     plt.plot(self.des_state_log[0, :],
+        #              self.des_state_log[1, :], "-r", label="desired")
+        #     plt.plot(self.state_log[0, :],
+        #              self.state_log[1, :], "-b", label="real")
+        #     plt.legend()
+        #     plt.xlabel("x[m]")
+        #     plt.ylabel("y[m]")
+        #     plt.axis("equal")
+        #     plt.grid(True)
+
+        #     # desired command plot
+        #     plt.figure()
+        #     plt.subplot(2, 1, 1)
+        #     plt.title(f'{self.robot_name}')
+        #     plt.plot(self.time_log, self.ctrl_v_log, "-b", label="REAL")
+        #     plt.plot(self.time_log, self.v_d_log, "-r", label="desired")
+        #     plt.legend()
+        #     plt.ylabel("linear velocity[m/s]")
+        #     plt.grid(True)
+        #     plt.subplot(2, 1, 2)
+        #     plt.plot(self.time_log, self.ctrl_omega_log, "-b", label="REAL")
+        #     plt.plot(self.time_log, self.omega_d_log, "-r", label="desired")
+        #     plt.legend()
+        #     plt.xlabel("time[sec]")
+        #     plt.ylabel("angular velocity[rad/s]")
+        #     plt.grid(True)
+
+        #     # plotJoint('position', self.time_log, q_log=self.q_log, q_des_log=self.q_des_log, joint_names=self.joint_names)
+        #     # joint velocities with limits
+        #     plt.figure()
+        #     plt.subplot(2, 1, 1)
+        #     plt.title(f'{self.robot_name}')
+        #     plt.plot(self.time_log, self.qd_log[0, :], "-b",  linewidth=3)
+        #     plt.plot(self.time_log, self.qd_des_log[0, :], "-r",  linewidth=4)
+        #     plt.plot(self.time_log, constants.MAXSPEED_RADS_PULLEY *
+        #              np.ones((len(self.time_log))), "-k",  linewidth=4)
+        #     plt.plot(self.time_log, -constants.MAXSPEED_RADS_PULLEY *
+        #              np.ones((len(self.time_log))), "-k",  linewidth=4)
+        #     plt.ylabel("WHEEL_L")
+        #     plt.grid(True)
+        #     plt.subplot(2, 1, 2)
+        #     plt.plot(self.time_log, self.qd_log[1, :], "-b",  linewidth=3)
+        #     plt.plot(self.time_log, self.qd_des_log[1, :], "-r",  linewidth=4)
+        #     plt.plot(self.time_log, constants.MAXSPEED_RADS_PULLEY *
+        #              np.ones((len(self.time_log))), "-k",  linewidth=4)
+        #     plt.plot(self.time_log, -constants.MAXSPEED_RADS_PULLEY *
+        #              np.ones((len(self.time_log))), "-k",  linewidth=4)
+        #     plt.ylabel("WHEEL_R")
+        #     plt.grid(True)
+
+        #     # states plot
+        #     # base position
+        #     plotFrameLinear(name='position', title=f'{self.robot_name}', time_log=self.time_log,
+        #                     des_Pose_log=self.des_state_log, Pose_log=self.state_log)
+        #     # base velocity
+        #     plotFrameLinear(name='velocity', title=f'{self.robot_name}', time_log=self.time_log, Twist_log=np.vstack(
+        #         (self.baseTwistW_log[:2, :], self.baseTwistW_log[5, :])))
+
+        #     # slippage vars
+        #     # plt.figure()
+        #     # plt.subplot(4, 1, 1)
+        #     # plt.plot(self.time_log, self.beta_l_log, "-b", label="real")
+        #     # plt.plot(self.time_log, self.beta_l_control_log,
+        #     #          "-r", label="control")
+        #     # plt.ylabel("beta_l")
+        #     # plt.legend()
+        #     # plt.grid(True)
+        #     # plt.subplot(4, 1, 2)
+        #     # plt.plot(self.time_log, self.beta_r_log, "-b", label="real")
+        #     # plt.plot(self.time_log, self.beta_r_control_log,
+        #     #          "-r", label="control")
+        #     # plt.ylabel("beta_r")
+        #     # plt.legend()
+        #     # plt.grid(True)
+        #     # plt.subplot(4, 1, 3)
+        #     # plt.plot(self.time_log, self.alpha_log, "-b", label="real")
+        #     # plt.plot(self.time_log, self.alpha_control_log,
+        #     #          "-r", label="control")
+        #     # plt.ylabel("alpha")
+        #     # plt.ylim([-1, 1])
+        #     # plt.grid(True)
+        #     # plt.legend()
+        #     # plt.subplot(4, 1, 4)
+        #     # plt.plot(self.time_log, self.radius_log, "-b")
+        #     # plt.ylim([-10, 10])
+        #     # plt.ylabel("radius")
+        #     # plt.grid(True)
+        #     #
+        #     # if self.ControlType == 'CLOSED_LOOP':
+        #     #     # tracking errors
+        #     #     self.log_e_x, self.log_e_y, self.log_e_theta = self.controller.getErrors()
+        #     #     plt.figure()
+        #     #     plt.subplot(2, 1, 1)
+        #     #     plt.plot(np.sqrt(np.power(self.log_e_x, 2) +
+        #     #              np.power(self.log_e_y, 2)), "-b")
+        #     #     plt.ylabel("exy")
+        #     #     plt.grid(True)
+        #     #     plt.subplot(2, 1, 2)
+        #     #     plt.plot(self.log_e_theta, "-b")
+        #     #     plt.ylabel("eth")
+        #     #     plt.grid(True)
 
     def mapToWheels(self, v_des, omega_des):
         #
@@ -679,7 +742,6 @@ def talker(robots, trajectory, groundMap, data_path):
     # robots[0].traj.set_initial_time(start_time=time_global)
 
     # CLOSE loop control
-    i = 0
     while not ros.is_shutdown():
 
         path_pub.publish(path_msg)
@@ -696,7 +758,7 @@ def talker(robots, trajectory, groundMap, data_path):
 
             # DEBUG uniform friction coeff
             if robot.DEBUG:
-                ground = Ground()
+                ground = Ground(friction_coefficient=0.2)
             else:
                 # update the ground according on the position
                 ground = groundMap.get_ground(
@@ -752,6 +814,11 @@ def talker(robots, trajectory, groundMap, data_path):
 
                 robot.data = pd.concat(
                     [robot.data, observation], ignore_index=True)
+
+            # Estimate local regressor
+            if time_global % 60 == 0 and time_global != 0:
+                robot.F, robot.a, robot.beta_hat_wls = local_first_estimate(
+                    robot.data)
 
         # wait for synconization of the control loop
         rate.sleep()
@@ -813,7 +880,77 @@ if __name__ == '__main__':
     except (ros.ROSInterruptException, ros.service.ServiceException):
         pass
     ros.signal_shutdown("killed")
+
+    df = pd.DataFrame(columns=['wheel_l', 'wheel_r',
+                      'beta_l', 'beta_r', 'alpha', 'i', 'j'])
+    msg = {}
+    for tracktro in tracktors:
+        msg[f"tractor{i}"] = {"F": tracktor.F, "a": tracktor.a}
+        df = pd.concat([tracktor.data, df], ignore_index=True)
+
+    theta_hat_wls_global = global_estimate(msg)
+    filtered = df[(df.i == 0) & (df.j == 1)]
+
+    omega_l = filtered.wheel_l.values
+    omega_r = filtered.wheel_r.values
+    beta_l = filtered.beta_l.values
+    beta_r = filtered.beta_r.values
+    alpha = filtered.alpha.values
+
+    # Extract coefficients from WLS estimation
+    # Coefficients for beta_l
+    theta_0_l, theta_1_l, theta_2_l = theta_hat_wls_global[:, 0]
+    # Coefficients for beta_r
+    theta_0_r, theta_1_r, theta_2_r = theta_hat_wls_global[:, 1]
+    # Coefficients for alpha
+    theta_0_alpha, theta_1_alpha, theta_2_alpha = theta_hat_wls_global[:, 2]
+
+    # Create a grid of values for omega_l and omega_r
+    omega_l_grid, omega_r_grid = np.meshgrid(np.linspace(omega_l.min(), omega_l.max(), 100),
+                                             np.linspace(omega_r.min(), omega_r.max(), 100))
+
+    # Calculate the corresponding beta_l, beta_r, and alpha values on the grid
+    beta_l_grid = theta_0_l + theta_1_l * omega_l_grid + theta_2_l * omega_r_grid
+    beta_r_grid = theta_0_r + theta_1_r * omega_l_grid + theta_2_r * omega_r_grid
+    alpha_grid = theta_0_alpha + theta_1_alpha * \
+        omega_l_grid + theta_2_alpha * omega_r_grid
+
+    fig = plt.figure(figsize=(18, 6))
+    fig.suptitle("WLS Regression")
+
+    # Beta_l surface
+    ax = fig.add_subplot(131, projection='3d')
+    ax.plot_surface(omega_l_grid, omega_r_grid,
+                    beta_l_grid, cmap="inferno", alpha=0.7)
+    ax.scatter(omega_l, omega_r, beta_l, color='red')  # Original data points
+    ax.set_title('Beta_l vs Wheel_l and Wheel_r')
+    ax.set_xlabel('Wheel_l')
+    ax.set_ylabel('Wheel_r')
+    ax.set_zlabel('Beta_l')
+
+    # Beta_r surface
+    ax = fig.add_subplot(132, projection='3d')
+    ax.plot_surface(omega_l_grid, omega_r_grid,
+                    beta_r_grid, cmap="inferno", alpha=0.7)
+    ax.scatter(omega_l, omega_r, beta_r, color='red')  # Original data points
+    ax.set_title('Beta_r vs Wheel_l and Wheel_r')
+    ax.set_xlabel('Wheel_l')
+    ax.set_ylabel('Wheel_r')
+    ax.set_zlabel('Beta_r')
+
+    # Alpha surface
+    ax = fig.add_subplot(133, projection='3d')
+    ax.plot_surface(omega_l_grid, omega_r_grid,
+                    alpha_grid, cmap="inferno", alpha=0.7)
+    ax.scatter(omega_l, omega_r, alpha, color='red')  # Original data points
+    ax.set_title('Alpha vs Wheel_l and Wheel_r')
+    ax.set_xlabel('Wheel_l')
+    ax.set_ylabel('Wheel_r')
+    ax.set_zlabel('Alpha')
+
+    # plt.show()
+
     for tracktor in tracktors:
         tracktor.deregister_node()
-        if tracktor.DEBUG:
-            tracktor.plotData()
+        # if tracktor.DEBUG:
+        tracktor.plotData()
