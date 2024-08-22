@@ -159,17 +159,11 @@ class GenericSimulator(BaseController):
         self.beta_r_control_log = np.empty(
             (conf.robot_params[self.robot_name]['buffer_size'])) * nan
 
-        # regressor
-        self.model = cb.CatBoostRegressor()
-        # laod model
-        try:
-            self.model_beta_l.load_model(os.environ[
-                'LOCOSIM_DIR'] + '/robot_control/base_controllers/tracked_robot/controllers/regressor/model_beta_l.cb')
-            self.model_beta_r.load_model(os.environ[
-                'LOCOSIM_DIR'] + '/robot_control/base_controllers/tracked_robot/controllers/regressor/model_beta_r.cb')
-        except:
-            print(colored(
-                "need to generate the models with running tracked_robot/controller/regressor/model_slippage_updated.py"))
+        # wls variables
+        self.data = pd.DataFrame(
+            columns=['wheel_l', 'wheel_r', 'beta_l', 'beta_r', 'alpha', 'i', 'j'])
+        
+        self.
 
     def logData(self):
         if (self.log_counter < conf.robot_params[self.robot_name]['buffer_size']):
@@ -569,7 +563,6 @@ def start_robots(robots, trajectory, groundMap):
         #     t += np.random.randint(5, 10)
         t += np.random.randint(5, 10)
 
-
         x, y, robot.old_theta, _, _, _, _ = trajectory.eval_trajectory(
             robot.t_start)
 
@@ -747,7 +740,7 @@ def talker(robots, trajectory, groundMap, data_path):
 
             # save data with low freq
             if time_global % 0.5 == 0 and time_global > 0:
-                new_data = pd.DataFrame({
+                observation = pd.DataFrame({
                     'wheel_l': [wheel_l],
                     'wheel_r': [wheel_r],
                     'beta_l': [beta_l],
@@ -757,7 +750,8 @@ def talker(robots, trajectory, groundMap, data_path):
                     'j': [j],
                 })
 
-                df = pd.concat([df, new_data], ignore_index=True)
+                robot.data = pd.concat(
+                    [robot.data, observation], ignore_index=True)
 
         # wait for synconization of the control loop
         rate.sleep()
@@ -811,9 +805,6 @@ if __name__ == '__main__':
     n_tracktors = 5  # with more than 3 it gets crazy
     tracktors = []
 
-    columns = ['wheel_l', 'wheel_r', 'beta_l', 'beta_r', 'alpha']
-    df = pd.DataFrame(columns=columns)
-
     for i in range(n_tracktors):
         tracktor = GenericSimulator(f"tractor{i}")
         tracktors.append(tracktor)
@@ -821,8 +812,6 @@ if __name__ == '__main__':
         talker(tracktors, trajectory, groundMap, data_path)
     except (ros.ROSInterruptException, ros.service.ServiceException):
         pass
-    df.to_csv(f'{data_path}/robot_data.csv', index=None, header=None)
-    print('Data exported')
     ros.signal_shutdown("killed")
     for tracktor in tracktors:
         tracktor.deregister_node()
