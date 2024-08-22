@@ -59,7 +59,7 @@ class GenericSimulator(BaseController):
         self.ControlType = 'CLOSED_LOOP_UNICYCLE'
         self.SAVE_BAGS = False
         self.LONG_SLIP_COMPENSATION = 'NONE'  # 'NN', 'EXP', 'NONE'
-        self.DEBUG = True
+        self.DEBUG = False
         self.t_start = 0.0
         self.pose_init = None
 
@@ -225,14 +225,14 @@ class GenericSimulator(BaseController):
             dt=conf.robot_params[self.robot_name]['dt'])  # , ground=groundParams)
         self.tracked_vehicle_simulator.initSimulation(vbody_init=np.array([0, 0, 0.0]),
                                                       pose_init=self.pose_init)
-        
-        print("init simulation 1",self.basePoseW)
-        
+
+        print("init simulation 1", self.basePoseW)
+
         self.basePoseW[self.u.sp_crd["LX"]] = self.pose_init[0]
         self.basePoseW[self.u.sp_crd["LY"]] = self.pose_init[1]
         self.basePoseW[self.u.sp_crd["AZ"]] = self.pose_init[2]
 
-        print("init simulation 2",self.basePoseW)
+        print("init simulation 2", self.basePoseW)
 
         # instantiating additional publishers
         self.joint_pub = ros.Publisher(
@@ -590,6 +590,7 @@ def start_robots(robots, trajectory, groundMap):
         # Lyapunov controller parameters
         robot.controller = LyapunovController(params=params)
 
+
 def generate_path_msg(trajectory):
 
     t = np.linspace(0, trajectory.t_tot, 100)
@@ -612,8 +613,8 @@ def generate_path_msg(trajectory):
 
 def generate_grid_msg(groundMap, data_path):
     friction_coeff_matrix = np.array([[groundMap.map[i][j].friction_coefficient for j in range(
-        groundMap.width)] for i in range(groundMap.height)])
-    
+        groundMap.j_max+1)] for i in range(groundMap.i_max+1)])
+
     print(friction_coeff_matrix)
 
     plt.matshow(friction_coeff_matrix, vmin=0.05, vmax=0.2, cmap='Greys_r')
@@ -633,9 +634,10 @@ def generate_grid_msg(groundMap, data_path):
     grid_msg.header.frame_id = "world"
     # Set up the info
     grid_msg.info = MapMetaData()
-    grid_msg.info.resolution = 1.0  # Each grid cell is 1x1 meter, adjust as necessary
-    grid_msg.info.width = groundMap.width
-    grid_msg.info.height = groundMap.height
+    grid_msg.info.resolution = 3.0  # Each grid cell is 1x1 meter, adjust as necessary
+    # grid_msg.info.resolution = 1.0  # Each grid cell is 1x1 meter, adjust as necessary
+    grid_msg.info.width = int(groundMap.width // 3)
+    grid_msg.info.height = int(groundMap.height // 3)
 
     # Set the origin of the grid map
     grid_msg.info.origin = Pose()
@@ -722,8 +724,6 @@ def talker(robots, trajectory, groundMap, data_path):
             if robot.ControlType == 'CLOSED_LOOP_UNICYCLE':
                 robot.ctrl_v, robot.ctrl_omega, robot.V, robot.V_dot = robot.controller.control_unicycle(
                     robot.robot_state, robot.time, robot.des_x, robot.des_y, robot.des_theta, robot.v_d, robot.omega_d, False)
-                
-            print(robot.ctrl_omega)
 
             robot.qd_des = robot.mapToWheels(robot.ctrl_v, robot.ctrl_omega)
 
@@ -765,7 +765,7 @@ def talker(robots, trajectory, groundMap, data_path):
 
         if np.mod(time_global, 1) == 0:
             print(colored(f"TIME: {time_global}", "red"))
-        
+
         # if i == 2:
         #     break
 
@@ -789,18 +789,18 @@ def generate_circle_viapoints(radius, num_points):
 if __name__ == '__main__':
     data_path = f"{os.environ.get('LOCOSIM_DIR')}/robot_control/drp_course_2023/data"
 
-    groundMap = GroundMap(10, 10)
+    groundMap = GroundMap(9, 9, 3)
     # groundMap = GroundMap(6, 6)
 
-    traj_viapoints = np.array([[-4.5,  1.],
-                               [-2., -2.5],
-                               [-0.5, -3.5],
-                               [1.5, -2.5],
-                               [3.5,  1.],
-                               [2.5,  3.5],
-                               [1.,  4.5],
-                               [-0.5,  3.4],
-                               [-1.5,  2.5]])
+    traj_viapoints = np.array([[-4.5,  0.],
+                               [-2., -3.5],
+                               [-0.5, -4.5],
+                               [1.5, -3.5],
+                               [3.5,  0.],
+                               [2.5,  2.5],
+                               [1.,  3.5],
+                               [-0.5,  2.4],
+                               [-2.5,  2]])
 
     # traj_viapoints = generate_circle_viapoints(2.5, 20)
     traj_t_tot = 50
