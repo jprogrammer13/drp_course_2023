@@ -562,11 +562,13 @@ def start_robots(robots, trajectory, groundMap):
     t = 0
 
     for robot in robots:
-        if robot.DEBUG:
-            t += 1
-        else:
-            t += np.random.randint(5, 10)
         robot.t_start = t
+        # if robot.DEBUG:
+        #     t += 1
+        # else:
+        #     t += np.random.randint(5, 10)
+        t += np.random.randint(5, 10)
+
 
         x, y, robot.old_theta, _, _, _, _ = trajectory.eval_trajectory(
             robot.t_start)
@@ -792,15 +794,15 @@ if __name__ == '__main__':
     groundMap = GroundMap(9, 9, 3)
     # groundMap = GroundMap(6, 6)
 
-    traj_viapoints = np.array([[-4.5,  0.],
-                               [-2., -3.5],
-                               [-0.5, -4.5],
-                               [1.5, -3.5],
-                               [3.5,  0.],
-                               [2.5,  2.5],
-                               [1.,  3.5],
-                               [-0.5,  2.4],
-                               [-2.5,  2]])
+    traj_viapoints = np.array([[-4.,  0.5],
+                               [-1.5, -3.],
+                               [0., -4.],
+                               [2., -3.],
+                               [4.,  0.5],
+                               [3.,  3.],
+                               [1.5,  4.],
+                               [0.,  2.9],
+                               [-2.,  2.5]])
 
     # traj_viapoints = generate_circle_viapoints(2.5, 20)
     traj_t_tot = 50

@@ -17,10 +17,10 @@ class GroundMap:
         #              for _ in range(width)] for _ in range(height)]
 
         # Calculate the coordinate range
-        self.x_min = -width // 2
-        self.x_max = width // 2
-        self.y_min = -height // 2
-        self.y_max = height // 2
+        self.x_min = -width / 2
+        self.x_max = width / 2
+        self.y_min = -height / 2
+        self.y_max = height / 2
 
         self.i_max = (height // size) - 1
         self.j_max = (width // size) - 1
