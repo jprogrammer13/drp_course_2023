@@ -66,8 +66,9 @@ class GenericSimulator(BaseController):
         self.t_start = 0.0
         self.pose_init = None
 
-        self.map_slippage_local_wls = MapSlippageLocalWLSEstimator(3,3,self.robot_name)
-        self.map_slippage_global_wls = MapSlippageDistributedWLSEstimator(3,3)
+        self.map_slippage_local_wls = MapSlippageLocalWLSEstimator(
+            3, 3, self.robot_name)
+        self.map_slippage_global_wls = MapSlippageDistributedWLSEstimator(3, 3)
 
         self.local_msg = None
         self.global_msg = []
@@ -223,7 +224,8 @@ class GenericSimulator(BaseController):
 
         # groundParams = Ground()
         self.tracked_vehicle_simulator = TrackedVehicleSimulator(
-            dt=conf.robot_params[self.robot_name]['dt'])  # , ground=groundParams)
+            # , ground=groundParams)
+            dt=conf.robot_params[self.robot_name]['dt'])
         self.tracked_vehicle_simulator.initSimulation(vbody_init=np.array([0, 0, 0.0]),
                                                       pose_init=self.pose_init)
 
@@ -828,7 +830,7 @@ def talker(n_robots, robots, trajectory, groundMap, data_path):
                 print(f"{robot.robot_name} computing wls...")
                 robot.map_slippage_local_wls.compute_wls_regressor(robot.data)
                 robot.local_msg = robot.map_slippage_local_wls.generate_msg()
-                # Send data to the other robots in a 
+                # Send data to the other robots in a
 
         # wait for synconization of the control loop
         rate.sleep()
@@ -843,22 +845,18 @@ def talker(n_robots, robots, trajectory, groundMap, data_path):
 
             # Emulate token-ring comunication
             for i in range((n_robots*2)-1):
-                i_ = i%n_robots
+                i_ = i % n_robots
                 # print(f"tractor{i_}")
                 robots[i_].global_msg[i_] = robots[i_].local_msg
                 # print(robot.global_msg)
-                next_robot_id = (i_+1)%(n_robots)
+                next_robot_id = (i_+1) % (n_robots)
                 robots[next_robot_id].global_msg = robots[i_].global_msg
-            
+
             # Once everyone has all the local estimates, compute the global
             for i, robot in enumerate(robots):
                 print(f"tractor{i} computing global wls...")
-                robot.map_slippage_global_wls.compute_wls_regressor(robot.global_msg)
-
-        # if i == 2:
-        #     break
-
-        # i+=1
+                robot.map_slippage_global_wls.compute_wls_regressor(
+                    robot.global_msg)
 
 
 def generate_circle_viapoints(radius, num_points):
@@ -875,9 +873,46 @@ def generate_circle_viapoints(radius, num_points):
     return viapoints
 
 
+def plot_wls(wls_regressor, data, param_str, param_id):
+    # Create figure and 3x3 subplots
+    fig, axes = plt.subplots(
+        3, 3, subplot_kw={'projection': '3d'}, figsize=(12, 12))
+
+    # Set a large title for the entire figure
+    fig.suptitle(param_str, fontsize=20)
+
+    # Loop through the 3x3 grid to plot something on each subplot
+    for i in range(3):
+        for j in range(3):
+            ax = axes[i, j]
+            df = data[(data.i == i) & (data.j == j)]
+            # Example data: plotting a simple surface
+            wheel_l, wheel_r = np.meshgrid(np.linspace(df["wheel_l"].min(), df["wheel_l"].max(), 100),
+                                           np.linspace(df["wheel_r"].min(), df["wheel_r"].max(), 100))
+            theta = wls_regressor.map_wls_regressors[i][j].theta[:, param_id]
+            wls = theta[0] + theta[1] * wheel_l + theta[2] * wheel_r
+            ax.plot_surface(wheel_l, wheel_r, wls, cmap="viridis")
+            ax.scatter(df["wheel_l"], df["wheel_r"], df[param_str],
+                       color='red')  # Original data points
+            # Optional: adjust fontsize
+            ax.set_title(f"Patch {i}:{j}", fontsize=15)
+            ax.set_xlabel("wheel_l")
+            ax.set_ylabel("wheel_r")
+            # Optional: You can label the z-axis if needed
+            ax.set_zlabel(param_str)
+
+    # Adjust the layout to be compact with more padding
+    # Increase space between subplots
+    plt.subplots_adjust(wspace=0.4, hspace=0.4)
+
+    # Adjust layout to avoid overlap of suptitle
+    # Adjust rect to accommodate the suptitle
+    plt.tight_layout(rect=[0, 0, 1, 1])
+
+
 if __name__ == '__main__':
     data_path = f"{os.environ.get('LOCOSIM_DIR')}/robot_control/drp_course_2023/data"
-
+    # Enable interactive mode
     groundMap = GroundMap(9, 9, 3)
     # groundMap = GroundMap(6, 6)
 
@@ -909,74 +944,14 @@ if __name__ == '__main__':
 
     df = pd.DataFrame(columns=['wheel_l', 'wheel_r',
                       'beta_l', 'beta_r', 'alpha', 'i', 'j'])
-    msg = {}
-    for tracktro in tracktors:
-        msg[f"tractor{i}"] = {"F": tracktor.F, "a": tracktor.a}
+    for tracktor in tracktors:
         df = pd.concat([tracktor.data, df], ignore_index=True)
 
-    theta_hat_wls_global = global_estimate(msg)
-    filtered = df[(df.i == 0) & (df.j == 1)]
-
-    omega_l = filtered.wheel_l.values
-    omega_r = filtered.wheel_r.values
-    beta_l = filtered.beta_l.values
-    beta_r = filtered.beta_r.values
-    alpha = filtered.alpha.values
-
-    # Extract coefficients from WLS estimation
-    # Coefficients for beta_l
-    theta_0_l, theta_1_l, theta_2_l = theta_hat_wls_global[:, 0]
-    # Coefficients for beta_r
-    theta_0_r, theta_1_r, theta_2_r = theta_hat_wls_global[:, 1]
-    # Coefficients for alpha
-    theta_0_alpha, theta_1_alpha, theta_2_alpha = theta_hat_wls_global[:, 2]
-
-    # Create a grid of values for omega_l and omega_r
-    omega_l_grid, omega_r_grid = np.meshgrid(np.linspace(omega_l.min(), omega_l.max(), 100),
-                                             np.linspace(omega_r.min(), omega_r.max(), 100))
-
-    # Calculate the corresponding beta_l, beta_r, and alpha values on the grid
-    beta_l_grid = theta_0_l + theta_1_l * omega_l_grid + theta_2_l * omega_r_grid
-    beta_r_grid = theta_0_r + theta_1_r * omega_l_grid + theta_2_r * omega_r_grid
-    alpha_grid = theta_0_alpha + theta_1_alpha * \
-        omega_l_grid + theta_2_alpha * omega_r_grid
-
-    fig = plt.figure(figsize=(18, 6))
-    fig.suptitle("WLS Regression")
-
-    # Beta_l surface
-    ax = fig.add_subplot(131, projection='3d')
-    ax.plot_surface(omega_l_grid, omega_r_grid,
-                    beta_l_grid, cmap="inferno", alpha=0.7)
-    ax.scatter(omega_l, omega_r, beta_l, color='red')  # Original data points
-    ax.set_title('Beta_l vs Wheel_l and Wheel_r')
-    ax.set_xlabel('Wheel_l')
-    ax.set_ylabel('Wheel_r')
-    ax.set_zlabel('Beta_l')
-
-    # Beta_r surface
-    ax = fig.add_subplot(132, projection='3d')
-    ax.plot_surface(omega_l_grid, omega_r_grid,
-                    beta_r_grid, cmap="inferno", alpha=0.7)
-    ax.scatter(omega_l, omega_r, beta_r, color='red')  # Original data points
-    ax.set_title('Beta_r vs Wheel_l and Wheel_r')
-    ax.set_xlabel('Wheel_l')
-    ax.set_ylabel('Wheel_r')
-    ax.set_zlabel('Beta_r')
-
-    # Alpha surface
-    ax = fig.add_subplot(133, projection='3d')
-    ax.plot_surface(omega_l_grid, omega_r_grid,
-                    alpha_grid, cmap="inferno", alpha=0.7)
-    ax.scatter(omega_l, omega_r, alpha, color='red')  # Original data points
-    ax.set_title('Alpha vs Wheel_l and Wheel_r')
-    ax.set_xlabel('Wheel_l')
-    ax.set_ylabel('Wheel_r')
-    ax.set_zlabel('Alpha')
-
-    # plt.show()
+    plot_wls(tracktors[0].map_slippage_global_wls, df, 'beta_l', 0)
+    plot_wls(tracktors[0].map_slippage_global_wls, df, 'beta_r', 1)
+    plot_wls(tracktors[0].map_slippage_global_wls, df, 'alpha', 2)
 
     for tracktor in tracktors:
         tracktor.deregister_node()
         # if tracktor.DEBUG:
-        tracktor.plotData()
+        # tracktor.plotData()
