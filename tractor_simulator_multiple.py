@@ -66,6 +66,12 @@ class GenericSimulator(BaseController):
         self.t_start = 0.0
         self.pose_init = None
 
+        self.map_slippage_local_wls = MapSlippageLocalWLSEstimator(3,3,self.robot_name)
+        self.map_slippage_global_wls = MapSlippageDistributedWLSEstimator(3,3)
+
+        self.local_msg = None
+        self.global_msg = []
+
     def set_pose_init(self, x, y, yaw):
         self.pose_init = np.array([x, y, yaw])
 
@@ -605,7 +611,7 @@ class GenericSimulator(BaseController):
         odom_publisher.publish(msg)
 
 
-def start_robots(robots, trajectory, groundMap):
+def start_robots(n_robots, robots, trajectory, groundMap):
     # launch roscore
     checkRosMaster()
     launchFileGeneric(rospkg.RosPack().get_path(
@@ -625,6 +631,8 @@ def start_robots(robots, trajectory, groundMap):
         # else:
         #     t += np.random.randint(5, 10)
         t += np.random.randint(5, 10)
+
+        robot.global_msg = [None for _ in range(n_robots)]
 
         x, y, robot.old_theta, _, _, _, _ = trajectory.eval_trajectory(
             robot.t_start)
@@ -710,11 +718,11 @@ def generate_grid_msg(groundMap, data_path):
     return grid_msg
 
 
-def talker(robots, trajectory, groundMap, data_path):
+def talker(n_robots, robots, trajectory, groundMap, data_path):
     global df
     # common stuff
 
-    start_robots(robots, trajectory, groundMap)
+    start_robots(n_robots, robots, trajectory, groundMap)
     # debug
     # robots[0].set_pose_init(0,0,0)
 
@@ -816,9 +824,11 @@ def talker(robots, trajectory, groundMap, data_path):
                     [robot.data, observation], ignore_index=True)
 
             # Estimate local regressor
-            if time_global % 60 == 0 and time_global != 0:
-                robot.F, robot.a, robot.beta_hat_wls = local_first_estimate(
-                    robot.data)
+            if time_global % 5 == 0 and time_global != 0:
+                print(f"{robot.robot_name} computing wls...")
+                robot.map_slippage_local_wls.compute_wls_regressor(robot.data)
+                robot.local_msg = robot.map_slippage_local_wls.generate_msg()
+                # Send data to the other robots in a 
 
         # wait for synconization of the control loop
         rate.sleep()
@@ -828,6 +838,22 @@ def talker(robots, trajectory, groundMap, data_path):
 
         if np.mod(time_global, 1) == 0:
             print(colored(f"TIME: {time_global}", "red"))
+
+        if time_global % 6 == 0 and time_global != 0:
+
+            # Emulate token-ring comunication
+            for i in range((n_robots*2)-1):
+                i_ = i%n_robots
+                # print(f"tractor{i_}")
+                robots[i_].global_msg[i_] = robots[i_].local_msg
+                # print(robot.global_msg)
+                next_robot_id = (i_+1)%(n_robots)
+                robots[next_robot_id].global_msg = robots[i_].global_msg
+            
+            # Once everyone has all the local estimates, compute the global
+            for i, robot in enumerate(robots):
+                print(f"tractor{i} computing global wls...")
+                robot.map_slippage_global_wls.compute_wls_regressor(robot.global_msg)
 
         # if i == 2:
         #     break
@@ -876,7 +902,7 @@ if __name__ == '__main__':
         tracktor = GenericSimulator(f"tractor{i}")
         tracktors.append(tracktor)
     try:
-        talker(tracktors, trajectory, groundMap, data_path)
+        talker(n_tracktors, tracktors, trajectory, groundMap, data_path)
     except (ros.ROSInterruptException, ros.service.ServiceException):
         pass
     ros.signal_shutdown("killed")
