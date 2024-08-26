@@ -658,6 +658,9 @@ def talker(n_robots, robots, trajectory, groundMap, data_path):
     rate = ros.Rate(1 / (slow_down_factor * conf.global_dt))
 
     time_global = 0.
+    time_ref = 0.
+    smoothing_factor = 0.
+    smoothing_period = 3.
 
     # previous traj
     # vel_gen = VelocityGenerator(simulation_time=40., DT=conf.robot_params[robots[0].robot_name]['dt'])
@@ -709,7 +712,7 @@ def talker(n_robots, robots, trajectory, groundMap, data_path):
                     break
             else:
                 robot.des_x, robot.des_y, robot.des_theta, robot.v_d, robot.omega_d, robot.v_dot_d, robot.omega_dot_d = trajectory.eval_trajectory(
-                    robot.time + robot.t_start)
+                    time_ref + robot.t_start)
                 robot.des_theta, robot.old_theta = unwrap_angle(
                     robot.des_theta, robot.old_theta)
 
@@ -763,6 +766,13 @@ def talker(n_robots, robots, trajectory, groundMap, data_path):
         # to avoid issues of dt 0.0009999
         time_global = np.round(
             time_global + np.array([conf.global_dt]), 3)
+
+        if time_global>smoothing_period:
+            smoothing_factor = 1.
+        else:
+            smoothing_factor+=conf.global_dt/smoothing_period
+        time_ref = np.round(
+            time_ref + np.array([conf.global_dt])*smoothing_factor, 3)
 
         if np.mod(time_global, 1) == 0:
             print(colored(f"TIME: {time_global}", "red"))
