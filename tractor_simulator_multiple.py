@@ -61,7 +61,7 @@ class GenericSimulator(BaseController):
         # 'OPEN_LOOP' 'CLOSED_LOOP_UNICYCLE' 'CLOSED_LOOP_SLIP_0'
         self.ControlType = 'CLOSED_LOOP_SLIP_0'
         self.SAVE_BAGS = False
-        self.LONG_SLIP_COMPENSATION = 'NN'  # 'NN' 'NONE'
+        self.LONG_SLIP_COMPENSATION = 'WLS'  # 'NN' 'NONE', "WLS"
         self.DEBUG = False
         self.t_start = 0.0
         self.pose_init = None
@@ -179,18 +179,30 @@ class GenericSimulator(BaseController):
         self.regressor_alpha = cb.CatBoostRegressor()
         # laod model
         try:
-            self.model_beta_l = self.regressor_beta_l.load_model(os.environ['LOCOSIM_DIR'] + '/robot_control/base_controllers/tracked_robot/regressor/model_beta_l.cb')
-            self.model_beta_r = self.regressor_beta_r.load_model(os.environ['LOCOSIM_DIR'] + '/robot_control/base_controllers/tracked_robot/regressor/model_beta_r.cb')
-            self.model_alpha = self.regressor_alpha.load_model(os.environ['LOCOSIM_DIR'] + '/robot_control/base_controllers/tracked_robot/regressor/model_alpha.cb')
+            if self.LONG_SLIP_COMPENSATION == "NN":
+                self.model_beta_l = self.regressor_beta_l.load_model(
+                    os.environ['LOCOSIM_DIR'] + '/robot_control/base_controllers/tracked_robot/regressor/model_beta_l.cb')
+                self.model_beta_r = self.regressor_beta_r.load_model(
+                    os.environ['LOCOSIM_DIR'] + '/robot_control/base_controllers/tracked_robot/regressor/model_beta_r.cb')
+                self.model_alpha = self.regressor_alpha.load_model(
+                    os.environ['LOCOSIM_DIR'] + '/robot_control/base_controllers/tracked_robot/regressor/model_alpha.cb')
+            elif self.LONG_SLIP_COMPENSATION == "WLS":
+                # Initialize only the structure, then update the weights
+                self.model_beta_l = Model()
+                self.model_beta_r = Model()
+                self.model_alpha = Model()
 
         except:
-            print(colored("need to generate the models with running tracked_robot/regressor/model_slippage_updated.py", "red"))
+            print(colored(
+                "need to generate the models with running tracked_robot/regressor/model_slippage_updated.py", "red"))
 
         if self.DEBUG:
-            vel_gen = VelocityGenerator(simulation_time=20., DT=conf.robot_params[self.robot_name]['dt'])
-            v_ol, omega_ol, v_dot_ol, omega_dot_ol, _ = vel_gen.velocity_mir_smooth(v_max_=0.2, omega_max_=0.3)
+            vel_gen = VelocityGenerator(
+                simulation_time=20., DT=conf.robot_params[self.robot_name]['dt'])
+            v_ol, omega_ol, v_dot_ol, omega_dot_ol, _ = vel_gen.velocity_mir_smooth(
+                v_max_=0.2, omega_max_=0.3)
             self.traj = Trajectory(ModelsList.UNICYCLE, self.pose_init[0], self.pose_init[1], self.pose_init[2], DT=conf.robot_params[self.robot_name]['dt'],
-                            v=v_ol, omega=omega_ol, v_dot=v_dot_ol, omega_dot=omega_dot_ol)
+                                   v=v_ol, omega=omega_ol, v_dot=v_dot_ol, omega_dot=omega_dot_ol)
 
     def logData(self):
         if (self.log_counter < conf.robot_params[self.robot_name]['buffer_size']):
@@ -459,8 +471,6 @@ class GenericSimulator(BaseController):
         qd_comp[1] = 1 / constants.SPROCKET_RADIUS * v_enc_r
         return qd_comp, beta_l, beta_r
 
-
-
     def send_des_jstate(self, q_des, qd_des, tau_ffwd):
         # No need to change the convention because in the HW interface we use our conventtion (see ros_impedance_contoller_xx.yaml)
         msg = JointState()
@@ -599,7 +609,7 @@ def generate_grid_msg(groundMap, data_path):
 
     print(friction_coeff_matrix)
 
-    plt.matshow(friction_coeff_matrix, vmin=0.05, vmax=0.2, cmap='Greys_r')
+    plt.matshow(friction_coeff_matrix, vmin=0, cmap='Greys_r')
     plt.colorbar()
     plt.savefig(f'{data_path}/grid_friction.png')
 
@@ -691,9 +701,15 @@ def talker(n_robots, robots, trajectory, groundMap, data_path):
 
             i, j = groundMap.coords_to_index(
                 robot.robot_state.x, robot.robot_state.y)
+            if robot.LONG_SLIP_COMPENSATION == "WLS":
+                wls_global_regressor = robot.map_slippage_global_wls.map_wls_regressors[i][j]
+
+                robot.model_beta_l.theta = wls_global_regressor.theta[..., 0]
+                robot.model_beta_r.theta = wls_global_regressor.theta[..., 1]
+                robot.model_alpha.theta = wls_global_regressor.theta[..., 2]
 
             if robot.DEBUG:
-                robot.des_x, robot.des_y, robot.des_theta, robot.v_d, robot.omega_d, robot.v_dot_d, robot.omega_dot_d , traj_finished = robot.traj.evalTraj(
+                robot.des_x, robot.des_y, robot.des_theta, robot.v_d, robot.omega_d, robot.v_dot_d, robot.omega_dot_d, traj_finished = robot.traj.evalTraj(
                     robot.time)
                 if traj_finished:
                     break
@@ -702,7 +718,6 @@ def talker(n_robots, robots, trajectory, groundMap, data_path):
                     robot.time + robot.t_start)
                 robot.des_theta, robot.old_theta = unwrap_angle(
                     robot.des_theta, robot.old_theta)
-
 
             if robot.ControlType == 'CLOSED_LOOP_SLIP_0':
                 robot.ctrl_v, robot.ctrl_omega, robot.V, robot.V_dot, robot.alpha_control = robot.controller.control_alpha(
@@ -714,10 +729,10 @@ def talker(n_robots, robots, trajectory, groundMap, data_path):
 
             robot.qd_des = robot.mapToWheels(robot.ctrl_v, robot.ctrl_omega)
 
-
             if not robot.ControlType == 'CLOSED_LOOP_UNICYCLE':
-                if robot.LONG_SLIP_COMPENSATION == 'NN':
-                    robot.qd_des, robot.beta_l_control, robot.beta_r_control = robot.computeLongSlipCompensationNN(robot.qd_des, constants)
+                if robot.LONG_SLIP_COMPENSATION == 'NN' or robot.LONG_SLIP_COMPENSATION == 'WLS':
+                    robot.qd_des, robot.beta_l_control, robot.beta_r_control = robot.computeLongSlipCompensationNN(
+                        robot.qd_des, constants)
 
             # # note there is only a ros_impedance controller, not a joint_group_vel controller, so I can only set velocity by integrating the wheel speed and
             # # senting it to be tracked from the impedance loop
@@ -728,7 +743,7 @@ def talker(n_robots, robots, trajectory, groundMap, data_path):
                 robot.q_des, robot.qd_des, robot.tau_ffwd)
 
             # save data with low freq
-            if time_global % 0.5 == 0 and time_global > 0:
+            if time_global % 0.5 == 0 and time_global > 5:
                 observation = pd.DataFrame({
                     'wheel_l': [wheel_l],
                     'wheel_r': [wheel_r],
@@ -847,9 +862,7 @@ if __name__ == '__main__':
     traj_t_tot = 50
     trajectory = LoopTrajectory(traj_viapoints, traj_t_tot)
 
-    n_tracktors = 5  
-
-
+    n_tracktors = 1
 
     tracktors = []
 
@@ -867,11 +880,12 @@ if __name__ == '__main__':
     for tracktor in tracktors:
         df = pd.concat([tracktor.data, df], ignore_index=True)
 
-    plot_wls(tracktors[0].map_slippage_global_wls, df, 'beta_l', 0)
-    plot_wls(tracktors[0].map_slippage_global_wls, df, 'beta_r', 1)
-    plot_wls(tracktors[0].map_slippage_global_wls, df, 'alpha', 2)
+    # plot_wls(tracktors[0].map_slippage_global_wls, df, 'beta_l', 0)
+    # plot_wls(tracktors[0].map_slippage_global_wls, df, 'beta_r', 1)
+    # plot_wls(tracktors[0].map_slippage_global_wls, df, 'alpha', 2)
 
     for tracktor in tracktors:
         tracktor.deregister_node()
         if tracktor.DEBUG:
             tracktor.plotData()
+        tracktor.plotData()

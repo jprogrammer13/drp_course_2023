@@ -10,8 +10,10 @@ class GroundMap:
 
         np.random.seed(13)
 
+        friction_coeffs = [0.1, 0.1568, 0.09041, 0.13349]
+
         # Initialize the map with Ground objects
-        self.map = [[Ground(friction_coefficient=0.05+np.random.random()*0.15)
+        self.map = [[Ground(friction_coefficient=friction_coeffs[np.random.randint(0, 3)])
                      for _ in range(0, width, size)] for _ in range(0, height, size)]
         # self.map = [[Ground(friction_coefficient=0.08)
         #              for _ in range(width)] for _ in range(height)]
@@ -28,8 +30,8 @@ class GroundMap:
     def coords_to_index(self, x, y):
 
         # Convert coordinates to indices
-        grid_x = int(np.clip(x - self.x_min / self.size, 0, self.j_max))
-        grid_y = int(np.clip(y - self.y_min / self.size, 0, self.i_max))
+        grid_x = int(np.clip((x - self.x_min) / self.size, 0, self.j_max))
+        grid_y = int(np.clip((y - self.y_min) / self.size, 0, self.i_max))
         # grid_y = int(np.clip(self.y_max - y, 0, self.height-1))
 
         return grid_y, grid_x

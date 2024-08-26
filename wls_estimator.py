@@ -2,12 +2,25 @@ import numpy as np
 import pandas as pd
 from scipy.linalg import block_diag
 
+
+class Model():
+
+    def __init__(self,  theta=np.zeros((3, 1))) -> None:
+        self.theta = theta
+
+    def predict(self, X):
+        X = X[None]
+        X = np.column_stack((np.ones(len(X)), X))
+        return X @ self.theta
+
+
 class WLSRegressor():
-    def __init__(self, F = None, a = None, theta = np.zeros((3,3))) -> None:
-        
+    def __init__(self, F=None, a=None, theta=np.zeros((3, 3))) -> None:
+
         self.F = F
         self.a = a
-        self.theta = theta = np.zeros((3,3))
+        self.theta = np.zeros((3, 3))
+
 
 class MapSlippageLocalWLSEstimator():
 
@@ -79,9 +92,11 @@ class MapSlippageLocalWLSEstimator():
         for i in range(self.width):
             msg[self.id][i] = {}
             for j in range(self.height):
-                msg[self.id][i][j] = {"F": self.map_wls_regressors[i][j].F, "a": self.map_wls_regressors[i][j].a}
+                msg[self.id][i][j] = {
+                    "F": self.map_wls_regressors[i][j].F, "a": self.map_wls_regressors[i][j].a}
 
         return msg
+
 
 class MapSlippageDistributedWLSEstimator():
 
@@ -103,8 +118,8 @@ class MapSlippageDistributedWLSEstimator():
                 sum_F += msg[i]["F"]
                 sum_a += msg[i]["a"]
 
-        if np.all(sum_F  == 0.):
-            beta_hat_wls_global = np.zeros((9,1))
+        if np.all(sum_F == 0.):
+            beta_hat_wls_global = np.zeros((9, 1))
         else:
             beta_hat_wls_global = np.linalg.inv(sum_F) @ sum_a
 
