@@ -856,30 +856,30 @@ if __name__ == '__main__':
     traj_t_tot = 50
     trajectory = LoopTrajectory(traj_viapoints, traj_t_tot)
 
-    n_tracktors = 1
+    n_tractors = 1
 
-    tracktors = []
+    tractors = []
 
-    for i in range(n_tracktors):
-        tracktor = GenericSimulator(f"tractor{i}")
-        tracktors.append(tracktor)
+    for i in range(n_tractors):
+        tractor = GenericSimulator(f"tractor{i}")
+        tractors.append(tractor)
     try:
-        talker(n_tracktors, tracktors, trajectory, groundMap, data_path)
+        talker(n_tractors, tractors, trajectory, groundMap, data_path)
     except (ros.ROSInterruptException, ros.service.ServiceException):
         pass
     ros.signal_shutdown("killed")
 
     df = pd.DataFrame(columns=['wheel_l', 'wheel_r',
                       'beta_l', 'beta_r', 'alpha', 'i', 'j'])
-    for tracktor in tracktors:
-        df = pd.concat([tracktor.data, df], ignore_index=True)
+    for tractor in tractors:
+        df = pd.concat([tractor.data, df], ignore_index=True)
 
-    # plot_wls(tracktors[0].map_slippage_global_wls, df, 'beta_l', 0)
-    # plot_wls(tracktors[0].map_slippage_global_wls, df, 'beta_r', 1)
-    # plot_wls(tracktors[0].map_slippage_global_wls, df, 'alpha', 2)
+    # plot_wls(tractors[0].map_slippage_global_wls, df, 'beta_l', 0)
+    # plot_wls(tractors[0].map_slippage_global_wls, df, 'beta_r', 1)
+    # plot_wls(tractors[0].map_slippage_global_wls, df, 'alpha', 2)
 
-    for tracktor in tracktors:
-        tracktor.deregister_node()
-        if tracktor.DEBUG:
-            tracktor.plotData()
-        tracktor.plotData()
+    for tractor in tractors:
+        tractor.deregister_node()
+        if tractor.DEBUG:
+            tractor.plotData()
+        tractor.plotData()
