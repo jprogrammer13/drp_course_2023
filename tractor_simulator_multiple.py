@@ -61,7 +61,7 @@ class GenericSimulator(BaseController):
         # 'OPEN_LOOP' 'CLOSED_LOOP_UNICYCLE' 'CLOSED_LOOP_SLIP_0'
         self.ControlType = 'CLOSED_LOOP_SLIP_0'
         self.SAVE_BAGS = False
-        self.LONG_SLIP_COMPENSATION = 'WLS'  # 'NN' 'NONE', "WLS"
+        self.LONG_SLIP_COMPENSATION = 'NN'  # 'NN' 'NONE', "WLS"
         self.DEBUG = False
         self.t_start = 0.0
         self.pose_init = None
@@ -537,7 +537,7 @@ def start_robots(n_robots, robots, trajectory, groundMap):
     launchFileGeneric(rospkg.RosPack().get_path(
         'tractor_description') + "/launch/multiple_robots.launch")
 
-    params = LyapunovParams(K_P=10., K_THETA=1., DT=conf.global_dt)
+    params = LyapunovParams(K_P=10., K_THETA=3., DT=conf.global_dt)
 
     # set seed for random generator
     np.random.seed(13)
@@ -726,7 +726,7 @@ def talker(n_robots, robots, trajectory, groundMap, data_path):
 
             robot.qd_des = robot.mapToWheels(robot.ctrl_v, robot.ctrl_omega)
 
-            if not robot.ControlType == 'CLOSED_LOOP_UNICYCLE':
+            if robot.ControlType != 'CLOSED_LOOP_UNICYCLE':
                 if robot.LONG_SLIP_COMPENSATION == 'NN' or robot.LONG_SLIP_COMPENSATION == 'WLS':
                     robot.qd_des, robot.beta_l_control, robot.beta_r_control = robot.computeLongSlipCompensationNN(
                         robot.qd_des, constants)
@@ -863,7 +863,7 @@ if __name__ == '__main__':
                                [-2.,  2.5]])
 
     # traj_viapoints = generate_circle_viapoints(2.5, 20)
-    traj_t_tot = 50
+    traj_t_tot = 20.
     trajectory = LoopTrajectory(traj_viapoints, traj_t_tot)
 
     n_tractors = 1
