@@ -58,10 +58,10 @@ class GenericSimulator(BaseController):
     def __init__(self, robot_name="tractor"):
         super().__init__(robot_name=robot_name, external_conf=conf)
         print("Initialized tractor multiple controller---------------------------------------------------------------")
-        # 'OPEN_LOOP' 'CLOSED_LOOP_UNICYCLE' 'CLOSED_LOOP_SLIP_0' 'CLOSED_LOOP_SLIP'
-        self.ControlType = 'CLOSED_LOOP_UNICYCLE'
+        # 'OPEN_LOOP' 'CLOSED_LOOP_UNICYCLE' 'CLOSED_LOOP_SLIP_0'
+        self.ControlType = 'CLOSED_LOOP_SLIP_0'
         self.SAVE_BAGS = False
-        self.LONG_SLIP_COMPENSATION = 'NONE'  # 'NN', 'EXP', 'NONE'
+        self.LONG_SLIP_COMPENSATION = 'NN'  # 'NN' 'NONE'
         self.DEBUG = False
         self.t_start = 0.0
         self.pose_init = None
@@ -173,6 +173,25 @@ class GenericSimulator(BaseController):
         self.data = pd.DataFrame(
             columns=['wheel_l', 'wheel_r', 'beta_l', 'beta_r', 'alpha', 'i', 'j'])
 
+        # regressor
+        self.regressor_beta_l = cb.CatBoostRegressor()
+        self.regressor_beta_r = cb.CatBoostRegressor()
+        self.regressor_alpha = cb.CatBoostRegressor()
+        # laod model
+        try:
+            self.model_beta_l = self.regressor_beta_l.load_model(os.environ['LOCOSIM_DIR'] + '/robot_control/base_controllers/tracked_robot/regressor/model_beta_l.cb')
+            self.model_beta_r = self.regressor_beta_r.load_model(os.environ['LOCOSIM_DIR'] + '/robot_control/base_controllers/tracked_robot/regressor/model_beta_r.cb')
+            self.model_alpha = self.regressor_alpha.load_model(os.environ['LOCOSIM_DIR'] + '/robot_control/base_controllers/tracked_robot/regressor/model_alpha.cb')
+
+        except:
+            print(colored("need to generate the models with running tracked_robot/regressor/model_slippage_updated.py", "red"))
+
+        if self.DEBUG:
+            vel_gen = VelocityGenerator(simulation_time=20., DT=conf.robot_params[self.robot_name]['dt'])
+            v_ol, omega_ol, v_dot_ol, omega_dot_ol, _ = vel_gen.velocity_mir_smooth(v_max_=0.2, omega_max_=0.3)
+            self.traj = Trajectory(ModelsList.UNICYCLE, self.pose_init[0], self.pose_init[1], self.pose_init[2], DT=conf.robot_params[self.robot_name]['dt'],
+                            v=v_ol, omega=omega_ol, v_dot=v_dot_ol, omega_dot=omega_dot_ol)
+
     def logData(self):
         if (self.log_counter < conf.robot_params[self.robot_name]['buffer_size']):
             # add your logs here
@@ -260,173 +279,111 @@ class GenericSimulator(BaseController):
         self.basePoseW[2] = conf.robot_params[self.robot_name]['spawn_z']
 
     def plotData(self):
+        if conf.plotting:
+            # xy plot
+            plt.figure()
+            plt.title(f'{self.robot_name}')
+            plt.plot(self.des_state_log[0, :],
+                     self.des_state_log[1, :], "-r", label="desired")
+            plt.plot(self.state_log[0, :],
+                     self.state_log[1, :], "-b", label="real")
+            plt.legend()
+            plt.xlabel("x[m]")
+            plt.ylabel("y[m]")
+            plt.axis("equal")
+            plt.grid(True)
 
-        filtered = self.data[(self.data.i == 0) & (self.data.j == 1)]
-        omega_l = filtered.wheel_l.values
-        omega_r = filtered.wheel_r.values
-        beta_l = filtered.beta_l.values
-        beta_r = filtered.beta_r.values
-        alpha = filtered.alpha.values
+            # desired command plot
+            plt.figure()
+            plt.subplot(2, 1, 1)
+            plt.title(f'{self.robot_name}')
+            plt.plot(self.time_log, self.ctrl_v_log, "-b", label="REAL")
+            plt.plot(self.time_log, self.v_d_log, "-r", label="desired")
+            plt.legend()
+            plt.ylabel("linear velocity[m/s]")
+            plt.grid(True)
+            plt.subplot(2, 1, 2)
+            plt.plot(self.time_log, self.ctrl_omega_log, "-b", label="REAL")
+            plt.plot(self.time_log, self.omega_d_log, "-r", label="desired")
+            plt.legend()
+            plt.xlabel("time[sec]")
+            plt.ylabel("angular velocity[rad/s]")
+            plt.grid(True)
 
-        # Extract coefficients from WLS estimation
-        # Coefficients for beta_l
-        theta_0_l, theta_1_l, theta_2_l = self.beta_hat_wls[:, 0]
-        # Coefficients for beta_r
-        theta_0_r, theta_1_r, theta_2_r = self.beta_hat_wls[:, 1]
-        # Coefficients for alpha
-        theta_0_alpha, theta_1_alpha, theta_2_alpha = self.beta_hat_wls[:, 2]
+            # plotJoint('position', self.time_log, q_log=self.q_log, q_des_log=self.q_des_log, joint_names=self.joint_names)
+            # joint velocities with limits
+            plt.figure()
+            plt.subplot(2, 1, 1)
+            plt.title(f'{self.robot_name}')
+            plt.plot(self.time_log, self.qd_log[0, :], "-b",  linewidth=3)
+            plt.plot(self.time_log, self.qd_des_log[0, :], "-r",  linewidth=4)
+            plt.plot(self.time_log, constants.MAXSPEED_RADS_PULLEY *
+                     np.ones((len(self.time_log))), "-k",  linewidth=4)
+            plt.plot(self.time_log, -constants.MAXSPEED_RADS_PULLEY *
+                     np.ones((len(self.time_log))), "-k",  linewidth=4)
+            plt.ylabel("WHEEL_L")
+            plt.grid(True)
+            plt.subplot(2, 1, 2)
+            plt.plot(self.time_log, self.qd_log[1, :], "-b",  linewidth=3)
+            plt.plot(self.time_log, self.qd_des_log[1, :], "-r",  linewidth=4)
+            plt.plot(self.time_log, constants.MAXSPEED_RADS_PULLEY *
+                     np.ones((len(self.time_log))), "-k",  linewidth=4)
+            plt.plot(self.time_log, -constants.MAXSPEED_RADS_PULLEY *
+                     np.ones((len(self.time_log))), "-k",  linewidth=4)
+            plt.ylabel("WHEEL_R")
+            plt.grid(True)
 
-        # Create a grid of values for omega_l and omega_r
-        omega_l_grid, omega_r_grid = np.meshgrid(np.linspace(omega_l.min(), omega_l.max(), 100),
-                                                 np.linspace(omega_r.min(), omega_r.max(), 100))
+            # states plot
+            # base position
+            plotFrameLinear(name='position', title=f'{self.robot_name}', time_log=self.time_log,
+                            des_Pose_log=self.des_state_log, Pose_log=self.state_log)
+            # base velocity
+            plotFrameLinear(name='velocity', title=f'{self.robot_name}', time_log=self.time_log, Twist_log=np.vstack(
+                (self.baseTwistW_log[:2, :], self.baseTwistW_log[5, :])))
 
-        # Calculate the corresponding beta_l, beta_r, and alpha values on the grid
-        beta_l_grid = theta_0_l + theta_1_l * omega_l_grid + theta_2_l * omega_r_grid
-        beta_r_grid = theta_0_r + theta_1_r * omega_l_grid + theta_2_r * omega_r_grid
-        alpha_grid = theta_0_alpha + theta_1_alpha * \
-            omega_l_grid + theta_2_alpha * omega_r_grid
-
-        fig = plt.figure(figsize=(18, 6))
-
-        # Beta_l surface
-        ax = fig.add_subplot(131, projection='3d')
-        ax.plot_surface(omega_l_grid, omega_r_grid,
-                        beta_l_grid, cmap="viridis", alpha=0.7)
-        # Original data points
-        ax.scatter(omega_l, omega_r, beta_l, color='red')
-        ax.set_title('Beta_l vs Wheel_l and Wheel_r')
-        ax.set_xlabel('Wheel_l')
-        ax.set_ylabel('Wheel_r')
-        ax.set_zlabel('Beta_l')
-
-        # Beta_r surface
-        ax = fig.add_subplot(132, projection='3d')
-        ax.plot_surface(omega_l_grid, omega_r_grid,
-                        beta_r_grid, cmap="viridis", alpha=0.7)
-        # Original data points
-        ax.scatter(omega_l, omega_r, beta_r, color='red')
-        ax.set_title('Beta_r vs Wheel_l and Wheel_r')
-        ax.set_xlabel('Wheel_l')
-        ax.set_ylabel('Wheel_r')
-        ax.set_zlabel('Beta_r')
-
-        # Alpha surface
-        ax = fig.add_subplot(133, projection='3d')
-        ax.plot_surface(omega_l_grid, omega_r_grid,
-                        alpha_grid, cmap="viridis", alpha=0.7)
-        # Original data points
-        ax.scatter(omega_l, omega_r, alpha, color='red')
-        ax.set_title('Alpha vs Wheel_l and Wheel_r')
-        ax.set_xlabel('Wheel_l')
-        ax.set_ylabel('Wheel_r')
-        ax.set_zlabel('Alpha')
-
-        plt.show()
-        # if conf.plotting:
-        #     # xy plot
-        #     plt.figure()
-        #     plt.title(f'{self.robot_name}')
-        #     plt.plot(self.des_state_log[0, :],
-        #              self.des_state_log[1, :], "-r", label="desired")
-        #     plt.plot(self.state_log[0, :],
-        #              self.state_log[1, :], "-b", label="real")
-        #     plt.legend()
-        #     plt.xlabel("x[m]")
-        #     plt.ylabel("y[m]")
-        #     plt.axis("equal")
-        #     plt.grid(True)
-
-        #     # desired command plot
-        #     plt.figure()
-        #     plt.subplot(2, 1, 1)
-        #     plt.title(f'{self.robot_name}')
-        #     plt.plot(self.time_log, self.ctrl_v_log, "-b", label="REAL")
-        #     plt.plot(self.time_log, self.v_d_log, "-r", label="desired")
-        #     plt.legend()
-        #     plt.ylabel("linear velocity[m/s]")
-        #     plt.grid(True)
-        #     plt.subplot(2, 1, 2)
-        #     plt.plot(self.time_log, self.ctrl_omega_log, "-b", label="REAL")
-        #     plt.plot(self.time_log, self.omega_d_log, "-r", label="desired")
-        #     plt.legend()
-        #     plt.xlabel("time[sec]")
-        #     plt.ylabel("angular velocity[rad/s]")
-        #     plt.grid(True)
-
-        #     # plotJoint('position', self.time_log, q_log=self.q_log, q_des_log=self.q_des_log, joint_names=self.joint_names)
-        #     # joint velocities with limits
-        #     plt.figure()
-        #     plt.subplot(2, 1, 1)
-        #     plt.title(f'{self.robot_name}')
-        #     plt.plot(self.time_log, self.qd_log[0, :], "-b",  linewidth=3)
-        #     plt.plot(self.time_log, self.qd_des_log[0, :], "-r",  linewidth=4)
-        #     plt.plot(self.time_log, constants.MAXSPEED_RADS_PULLEY *
-        #              np.ones((len(self.time_log))), "-k",  linewidth=4)
-        #     plt.plot(self.time_log, -constants.MAXSPEED_RADS_PULLEY *
-        #              np.ones((len(self.time_log))), "-k",  linewidth=4)
-        #     plt.ylabel("WHEEL_L")
-        #     plt.grid(True)
-        #     plt.subplot(2, 1, 2)
-        #     plt.plot(self.time_log, self.qd_log[1, :], "-b",  linewidth=3)
-        #     plt.plot(self.time_log, self.qd_des_log[1, :], "-r",  linewidth=4)
-        #     plt.plot(self.time_log, constants.MAXSPEED_RADS_PULLEY *
-        #              np.ones((len(self.time_log))), "-k",  linewidth=4)
-        #     plt.plot(self.time_log, -constants.MAXSPEED_RADS_PULLEY *
-        #              np.ones((len(self.time_log))), "-k",  linewidth=4)
-        #     plt.ylabel("WHEEL_R")
-        #     plt.grid(True)
-
-        #     # states plot
-        #     # base position
-        #     plotFrameLinear(name='position', title=f'{self.robot_name}', time_log=self.time_log,
-        #                     des_Pose_log=self.des_state_log, Pose_log=self.state_log)
-        #     # base velocity
-        #     plotFrameLinear(name='velocity', title=f'{self.robot_name}', time_log=self.time_log, Twist_log=np.vstack(
-        #         (self.baseTwistW_log[:2, :], self.baseTwistW_log[5, :])))
-
-        #     # slippage vars
-        #     # plt.figure()
-        #     # plt.subplot(4, 1, 1)
-        #     # plt.plot(self.time_log, self.beta_l_log, "-b", label="real")
-        #     # plt.plot(self.time_log, self.beta_l_control_log,
-        #     #          "-r", label="control")
-        #     # plt.ylabel("beta_l")
-        #     # plt.legend()
-        #     # plt.grid(True)
-        #     # plt.subplot(4, 1, 2)
-        #     # plt.plot(self.time_log, self.beta_r_log, "-b", label="real")
-        #     # plt.plot(self.time_log, self.beta_r_control_log,
-        #     #          "-r", label="control")
-        #     # plt.ylabel("beta_r")
-        #     # plt.legend()
-        #     # plt.grid(True)
-        #     # plt.subplot(4, 1, 3)
-        #     # plt.plot(self.time_log, self.alpha_log, "-b", label="real")
-        #     # plt.plot(self.time_log, self.alpha_control_log,
-        #     #          "-r", label="control")
-        #     # plt.ylabel("alpha")
-        #     # plt.ylim([-1, 1])
-        #     # plt.grid(True)
-        #     # plt.legend()
-        #     # plt.subplot(4, 1, 4)
-        #     # plt.plot(self.time_log, self.radius_log, "-b")
-        #     # plt.ylim([-10, 10])
-        #     # plt.ylabel("radius")
-        #     # plt.grid(True)
-        #     #
-        #     # if self.ControlType == 'CLOSED_LOOP':
-        #     #     # tracking errors
-        #     #     self.log_e_x, self.log_e_y, self.log_e_theta = self.controller.getErrors()
-        #     #     plt.figure()
-        #     #     plt.subplot(2, 1, 1)
-        #     #     plt.plot(np.sqrt(np.power(self.log_e_x, 2) +
-        #     #              np.power(self.log_e_y, 2)), "-b")
-        #     #     plt.ylabel("exy")
-        #     #     plt.grid(True)
-        #     #     plt.subplot(2, 1, 2)
-        #     #     plt.plot(self.log_e_theta, "-b")
-        #     #     plt.ylabel("eth")
-        #     #     plt.grid(True)
+            # slippage vars
+            # plt.figure()
+            # plt.subplot(4, 1, 1)
+            # plt.plot(self.time_log, self.beta_l_log, "-b", label="real")
+            # plt.plot(self.time_log, self.beta_l_control_log,
+            #          "-r", label="control")
+            # plt.ylabel("beta_l")
+            # plt.legend()
+            # plt.grid(True)
+            # plt.subplot(4, 1, 2)
+            # plt.plot(self.time_log, self.beta_r_log, "-b", label="real")
+            # plt.plot(self.time_log, self.beta_r_control_log,
+            #          "-r", label="control")
+            # plt.ylabel("beta_r")
+            # plt.legend()
+            # plt.grid(True)
+            # plt.subplot(4, 1, 3)
+            # plt.plot(self.time_log, self.alpha_log, "-b", label="real")
+            # plt.plot(self.time_log, self.alpha_control_log,
+            #          "-r", label="control")
+            # plt.ylabel("alpha")
+            # plt.ylim([-1, 1])
+            # plt.grid(True)
+            # plt.legend()
+            # plt.subplot(4, 1, 4)
+            # plt.plot(self.time_log, self.radius_log, "-b")
+            # plt.ylim([-10, 10])
+            # plt.ylabel("radius")
+            # plt.grid(True)
+            #
+            # if self.ControlType == 'CLOSED_LOOP':
+            #     # tracking errors
+            #     self.log_e_x, self.log_e_y, self.log_e_theta = self.controller.getErrors()
+            #     plt.figure()
+            #     plt.subplot(2, 1, 1)
+            #     plt.plot(np.sqrt(np.power(self.log_e_x, 2) +
+            #              np.power(self.log_e_y, 2)), "-b")
+            #     plt.ylabel("exy")
+            #     plt.grid(True)
+            #     plt.subplot(2, 1, 2)
+            #     plt.plot(self.log_e_theta, "-b")
+            #     plt.ylabel("eth")
+            #     plt.grid(True)
 
     def mapToWheels(self, v_des, omega_des):
         #
@@ -486,56 +443,11 @@ class GenericSimulator(BaseController):
 
         return beta_l, beta_r, side_slip, radius
 
-    def computeLongSlipCompensation(self, v, omega, qd_des, constants):
-        # in the case radius is infinite, betas are zero (this is to avoid Nans)
-
-        if (abs(omega) < 1e-05) and (abs(v) > 1e-05):
-            radius = 1e08 * np.sign(v)
-        elif (abs(omega) < 1e-05) and (abs(v) < 1e-05):
-            radius = 1e8
-        else:
-            radius = v / (omega)
-
-        # compute track velocity from encoder
-        v_enc_l = constants.SPROCKET_RADIUS*qd_des[0]
-        v_enc_r = constants.SPROCKET_RADIUS*qd_des[1]
-
-        # estimate beta_inner, beta_outer from turning radius
-        if (radius >= 0.0):  # turning left, positive radius, left wheel is inner right wheel is outer
-            beta_l = constants.beta_slip_inner_coefficients_left[0]*np.exp(
-                constants.beta_slip_inner_coefficients_left[1]*radius)
-            v_enc_l += beta_l
-            beta_r = constants.beta_slip_outer_coefficients_left[0]*np.exp(
-                constants.beta_slip_outer_coefficients_left[1]*radius)
-            v_enc_r += beta_r
-
-        else:  # turning right, negative radius, left wheel is outer right is inner
-            beta_r = constants.beta_slip_inner_coefficients_right[0]*np.exp(
-                constants.beta_slip_inner_coefficients_right[1]*radius)
-            v_enc_r += beta_r
-            beta_l = constants.beta_slip_outer_coefficients_right[0]*np.exp(
-                constants.beta_slip_outer_coefficients_right[1]*radius)
-            v_enc_l += beta_l
-
-        qd_comp = np.zeros(2)
-        qd_comp[0] = 1/constants.SPROCKET_RADIUS * v_enc_l
-        qd_comp[1] = 1/constants.SPROCKET_RADIUS * v_enc_r
-        return qd_comp, beta_l, beta_r, radius
-
-    def computeLongSlipCompensationNN(self, v, omega, qd_des, constants):
-        # in the case radius is infinite, betas are zero (this is to avoid Nans)
-        # in the case radius is infinite, betas are zero (this is to avoid Nans)
-        #
-        if (abs(omega) < 1e-05) and (abs(v) > 1e-05):
-            radius = 1e08 * np.sign(v)
-        elif (abs(omega) < 1e-05) and (abs(v) < 1e-05):
-            radius = 1e8
-        else:
-            radius = v / (omega)
-
+    def computeLongSlipCompensationNN(self, qd_des, constants):
         # compute track velocity from encoder
         v_enc_l = constants.SPROCKET_RADIUS * qd_des[0]
         v_enc_r = constants.SPROCKET_RADIUS * qd_des[1]
+        # predict the betas from NN
         beta_l = self.model_beta_l.predict(qd_des)
         beta_r = self.model_beta_r.predict(qd_des)
 
@@ -545,7 +457,9 @@ class GenericSimulator(BaseController):
         qd_comp = np.zeros(2)
         qd_comp[0] = 1 / constants.SPROCKET_RADIUS * v_enc_l
         qd_comp[1] = 1 / constants.SPROCKET_RADIUS * v_enc_r
-        return qd_comp, beta_l, beta_r, radius
+        return qd_comp, beta_l, beta_r
+
+
 
     def send_des_jstate(self, q_des, qd_des, tau_ffwd):
         # No need to change the convention because in the HW interface we use our conventtion (see ros_impedance_contoller_xx.yaml)
@@ -768,7 +682,7 @@ def talker(n_robots, robots, trajectory, groundMap, data_path):
 
             # DEBUG uniform friction coeff
             if robot.DEBUG:
-                ground = Ground(friction_coefficient=0.2)
+                ground = Ground(friction_coefficient=0.1)
             else:
                 # update the ground according on the position
                 ground = groundMap.get_ground(
@@ -778,15 +692,21 @@ def talker(n_robots, robots, trajectory, groundMap, data_path):
             i, j = groundMap.coords_to_index(
                 robot.robot_state.x, robot.robot_state.y)
 
-            robot.des_x, robot.des_y, robot.des_theta, robot.v_d, robot.omega_d, robot.v_dot_d, robot.omega_dot_d = trajectory.eval_trajectory(
-                robot.time + robot.t_start)
-            robot.des_theta, robot.old_theta = unwrap_angle(
-                robot.des_theta, robot.old_theta)
+            if robot.DEBUG:
+                robot.des_x, robot.des_y, robot.des_theta, robot.v_d, robot.omega_d, robot.v_dot_d, robot.omega_dot_d , traj_finished = robot.traj.evalTraj(
+                    robot.time)
+                if traj_finished:
+                    break
+            else:
+                robot.des_x, robot.des_y, robot.des_theta, robot.v_d, robot.omega_d, robot.v_dot_d, robot.omega_dot_d = trajectory.eval_trajectory(
+                    robot.time + robot.t_start)
+                robot.des_theta, robot.old_theta = unwrap_angle(
+                    robot.des_theta, robot.old_theta)
 
-            # robot.des_x, robot.des_y, robot.des_theta, robot.v_d, robot.omega_d, robot.v_dot_d, robot.omega_dot_d , traj_finished = robots[0].traj.evalTraj(
-            #     robots[0].time)
-            # if traj_finished:
-            #     break
+
+            if robot.ControlType == 'CLOSED_LOOP_SLIP_0':
+                robot.ctrl_v, robot.ctrl_omega, robot.V, robot.V_dot, robot.alpha_control = robot.controller.control_alpha(
+                    robot.robot_state, robot.time, robot.des_x, robot.des_y, robot.des_theta, robot.v_d, robot.omega_d, robot.v_dot_d, robot.omega_dot_d, False, robot.model_alpha, approx=True)
 
             if robot.ControlType == 'CLOSED_LOOP_UNICYCLE':
                 robot.ctrl_v, robot.ctrl_omega, robot.V, robot.V_dot = robot.controller.control_unicycle(
@@ -794,13 +714,10 @@ def talker(n_robots, robots, trajectory, groundMap, data_path):
 
             robot.qd_des = robot.mapToWheels(robot.ctrl_v, robot.ctrl_omega)
 
-            # if not robot.ControlType == 'CLOSED_LOOP_UNICYCLE' and robot.LONG_SLIP_COMPENSATION != 'NONE':
-            #     if robot.LONG_SLIP_COMPENSATION == 'NN':
-            #         robot.qd_des, robot.beta_l_control, robot.beta_r_control, robot.radius = robot.computeLongSlipCompensationNN(
-            #             robot.ctrl_v, robot.ctrl_omega, robot.qd_des, constants)
-            #     else:  # exponential
-            #         robot.qd_des, robot.beta_l_control, robot.beta_r_control, robot.radius = robot.computeLongSlipCompensation(
-            #             robot.ctrl_v, robot.ctrl_omega, robot.qd_des, constants)
+
+            if not robot.ControlType == 'CLOSED_LOOP_UNICYCLE':
+                if robot.LONG_SLIP_COMPENSATION == 'NN':
+                    robot.qd_des, robot.beta_l_control, robot.beta_r_control = robot.computeLongSlipCompensationNN(robot.qd_des, constants)
 
             # # note there is only a ros_impedance controller, not a joint_group_vel controller, so I can only set velocity by integrating the wheel speed and
             # # senting it to be tracked from the impedance loop
@@ -930,7 +847,10 @@ if __name__ == '__main__':
     traj_t_tot = 50
     trajectory = LoopTrajectory(traj_viapoints, traj_t_tot)
 
-    n_tracktors = 5  # with more than 3 it gets crazy
+    n_tracktors = 5  
+
+
+
     tracktors = []
 
     for i in range(n_tracktors):
@@ -953,5 +873,5 @@ if __name__ == '__main__':
 
     for tracktor in tracktors:
         tracktor.deregister_node()
-        # if tracktor.DEBUG:
-        # tracktor.plotData()
+        if tracktor.DEBUG:
+            tracktor.plotData()
