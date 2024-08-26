@@ -482,6 +482,8 @@ class GenericSimulator(BaseController):
         self.pub_des_jstate.publish(msg)  # publish in /commands
 
         # trigger simulators
+        if np.any(qd_des > np.array([constants.MAXSPEED_RADS_PULLEY, constants.MAXSPEED_RADS_PULLEY])) or np.any(qd_des < -np.array([constants.MAXSPEED_RADS_PULLEY, constants.MAXSPEED_RADS_PULLEY])):
+            print(colored("wheel speed beyond limits, NN might do wrong predictions", "red"))
         self.tracked_vehicle_simulator.simulateOneStep(qd_des[0], qd_des[1])
         pose, pose_der = self.tracked_vehicle_simulator.getRobotState()
         # fill in base state
