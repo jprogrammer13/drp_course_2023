@@ -58,7 +58,7 @@ class LoopTrajectory:
         # TODO
         omega_dot = 0.
 
-        return x, y, theta, v, omega, v_dot, omega_dot
+        return np.squeeze(x), np.squeeze(y), np.squeeze(theta), np.squeeze(v), np.squeeze(omega), np.squeeze(v_dot),np.squeeze(omega_dot)
 
     def plot_trajectory(self):
         """

@@ -293,6 +293,7 @@ class GenericSimulator(BaseController):
     def plotData(self):
         if conf.plotting:
             # xy plot
+            # xy plot
             plt.figure()
             plt.title(f'{self.robot_name}')
             plt.plot(self.des_state_log[0, :],
@@ -348,54 +349,45 @@ class GenericSimulator(BaseController):
             # states plot
             # base position
             plotFrameLinear(name='position', title=f'{self.robot_name}', time_log=self.time_log,
-                            des_Pose_log=self.des_state_log, Pose_log=self.state_log)
-            # base velocity
-            plotFrameLinear(name='velocity', title=f'{self.robot_name}', time_log=self.time_log, Twist_log=np.vstack(
-                (self.baseTwistW_log[:2, :], self.baseTwistW_log[5, :])))
+                            des_Pose_log=self.des_state_log, Pose_log=self.state_log)            # base velocity
+            # plotFrameLinear(name='velocity', title=f'{self.robot_name}', time_log=self.time_log, Twist_log=np.vstack(
+            #     (self.baseTwistW_log[:2, :], self.baseTwistW_log[5, :])))
 
             # slippage vars
-            # plt.figure()
-            # plt.subplot(4, 1, 1)
-            # plt.plot(self.time_log, self.beta_l_log, "-b", label="real")
-            # plt.plot(self.time_log, self.beta_l_control_log,
-            #          "-r", label="control")
-            # plt.ylabel("beta_l")
-            # plt.legend()
-            # plt.grid(True)
-            # plt.subplot(4, 1, 2)
-            # plt.plot(self.time_log, self.beta_r_log, "-b", label="real")
-            # plt.plot(self.time_log, self.beta_r_control_log,
-            #          "-r", label="control")
-            # plt.ylabel("beta_r")
-            # plt.legend()
-            # plt.grid(True)
-            # plt.subplot(4, 1, 3)
-            # plt.plot(self.time_log, self.alpha_log, "-b", label="real")
-            # plt.plot(self.time_log, self.alpha_control_log,
-            #          "-r", label="control")
-            # plt.ylabel("alpha")
-            # plt.ylim([-1, 1])
-            # plt.grid(True)
-            # plt.legend()
-            # plt.subplot(4, 1, 4)
-            # plt.plot(self.time_log, self.radius_log, "-b")
-            # plt.ylim([-10, 10])
-            # plt.ylabel("radius")
-            # plt.grid(True)
-            #
-            # if self.ControlType == 'CLOSED_LOOP':
-            #     # tracking errors
-            #     self.log_e_x, self.log_e_y, self.log_e_theta = self.controller.getErrors()
-            #     plt.figure()
-            #     plt.subplot(2, 1, 1)
-            #     plt.plot(np.sqrt(np.power(self.log_e_x, 2) +
-            #              np.power(self.log_e_y, 2)), "-b")
-            #     plt.ylabel("exy")
-            #     plt.grid(True)
-            #     plt.subplot(2, 1, 2)
-            #     plt.plot(self.log_e_theta, "-b")
-            #     plt.ylabel("eth")
-            #     plt.grid(True)
+            plt.figure()
+            plt.subplot(3, 1, 1)
+            plt.plot(self.time_log, self.beta_l_log, "-b", label="real")
+            plt.plot(self.time_log, self.beta_l_control_log, "-r", label="control")
+            plt.ylabel("beta_l")
+            plt.legend()
+            plt.grid(True)
+            plt.subplot(3, 1, 2)
+            plt.plot(self.time_log, self.beta_r_log, "-b", label="real")
+            plt.plot(self.time_log, self.beta_r_control_log, "-r", label="control")
+            plt.ylabel("beta_r")
+            plt.legend()
+            plt.grid(True)
+            plt.subplot(3, 1, 3)
+            plt.plot(self.time_log, self.alpha_log, "-b", label="real")
+            plt.plot(self.time_log, self.alpha_control_log, "-r", label="control")
+            plt.ylabel("alpha")
+            plt.ylim([-0.4, 0.4])
+            plt.grid(True)
+            plt.legend()
+
+            # tracking errors
+            self.log_e_x, self.log_e_y, self.log_e_theta = self.controller.getErrors()
+            plt.figure()
+            plt.subplot(2, 1, 1)
+            exy = np.sqrt(np.power(self.log_e_x, 2) + np.power(self.log_e_y, 2))
+            plt.plot(exy, "-b")
+            plt.ylabel("exy")
+            plt.title("tracking error")
+            plt.grid(True)
+            plt.subplot(2, 1, 2)
+            plt.plot(self.log_e_theta, "-b")
+            plt.ylabel("eth")
+            plt.grid(True)
 
     def mapToWheels(self, v_des, omega_des):
         #
