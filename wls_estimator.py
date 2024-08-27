@@ -19,7 +19,7 @@ class WLSRegressor():
 
         self.F = F
         self.a = a
-        self.theta = np.zeros((3, 3))
+        self.theta = theta
 
 
 class MapSlippageLocalWLSEstimator():
@@ -108,7 +108,7 @@ class MapSlippageDistributedWLSEstimator():
         self.map_wls_regressors = [
             [WLSRegressor() for j in range(width)] for i in range(height)]
 
-    def global_estimate(self, msg):
+    def global_first_estimate(self, msg):
 
         sum_F = np.zeros((9, 9))
         sum_a = np.zeros((9,))
@@ -125,6 +125,50 @@ class MapSlippageDistributedWLSEstimator():
 
         return beta_hat_wls_global.reshape(3, -1).T
 
+    def compute_weights(self, msg):
+        n_robots = len(msg.keys())
+        connection_matrix = np.array([
+            [0, 1, 0, 0, 1],
+            [1, 0, 1, 0, 0],
+            [0, 1, 0, 1, 0],
+            [0, 0, 1, 0, 1],
+            [1, 0, 0, 1, 0]
+        ])
+
+        q_ij = np.zeros((n_robots, n_robots))
+        for i in range(n_robots):
+            for j in range(n_robots):
+                if i == j:
+                    q_ij[i, j] = 1 - (2/(n_robots))
+                else:
+                    if i != j and connection_matrix[i, j] == 1:
+                        q_ij[i, j] = 1/n_robots
+                    else:
+                        q_ij[i, j] = 0
+        return q_ij
+
+    def global_new_estimate(self, msg, robot_id, theta_init):
+
+        sum_F_next = msg[robot_id]["F"]
+        sum_a_next = msg[robot_id]["a"]
+        q_ij = self.compute_weights(msg)
+        robot_id_num = int(robot_id[-1])
+
+        for i in msg.keys():
+            if isinstance(msg[i]["F"], np.ndarray) and isinstance(msg[robot_id]["F"], np.ndarray):
+                i_num = int(i[-1])
+                sum_F_next += q_ij[robot_id_num, i_num] * \
+                    (msg[i]["F"] - msg[robot_id]["F"])
+                sum_a_next += q_ij[robot_id_num, i_num] * \
+                    (msg[i]["a"] - msg[robot_id]["a"])
+
+        if not (isinstance(msg[i]["F"], np.ndarray) and isinstance(msg[robot_id]["F"], np.ndarray)):
+            beta_hat_wls_global = theta_init
+        else:
+            beta_hat_wls_global = np.linalg.inv(sum_F_next) @ sum_a_next
+            beta_hat_wls_global = beta_hat_wls_global.reshape(3, -1).T
+        return beta_hat_wls_global
+
     def compute_wls_regressor(self, msgs):
         for i in range(self.width):
             for j in range(self.height):
@@ -135,5 +179,18 @@ class MapSlippageDistributedWLSEstimator():
                     patch_msg[id] = msg[id][i][j]
 
                 # print(list(patch_msg.keys()))
-                self.map_wls_regressors[i][j].theta = self.global_estimate(
+                self.map_wls_regressors[i][j].theta = self.global_first_estimate(
                     patch_msg)
+
+    def compute_wls_new_estimate_regressor(self, msgs, robot_name):
+        for i in range(self.width):
+            for j in range(self.height):
+                patch_msg = {}
+                for msg in msgs:
+                    id = list(msg.keys())[0]
+                    # print(id, i, j)
+                    patch_msg[id] = msg[id][i][j]
+
+                # print(list(patch_msg.keys()))
+                self.map_wls_regressors[i][j].theta = self.global_new_estimate(
+                    patch_msg, robot_name, self.map_wls_regressors[i][j].theta)

@@ -608,11 +608,10 @@ def generate_grid_msg(groundMap, data_path):
     friction_coeff_matrix = np.array([[groundMap.map[i][j].friction_coefficient for j in range(
         groundMap.j_max+1)] for i in range(groundMap.i_max+1)])
 
-    
-
     # Normalize the data to a custom range to accentuate differences
-    friction_coeff_normalized = friction_coeff_matrix / np.max(friction_coeff_matrix)
-    
+    friction_coeff_normalized = friction_coeff_matrix / \
+        np.max(friction_coeff_matrix)
+
     print(friction_coeff_normalized)
 
     plt.matshow(friction_coeff_matrix, vmin=0, cmap='Greys_r')
@@ -803,8 +802,14 @@ def talker(n_robots, robots, trajectory, groundMap, data_path):
             # Once everyone has all the local estimates, compute the global
             for i, robot in enumerate(robots):
                 print(f"tractor{i} computing global wls...")
-                robot.map_slippage_global_wls.compute_wls_regressor(
-                    robot.global_msg)
+                # robot.map_slippage_global_wls.compute_wls_regressor(
+                #     robot.global_msg)
+                if time_global <= 6:
+                    robot.map_slippage_global_wls.compute_wls_regressor(
+                        robot.global_msg)
+                else:
+                    robot.map_slippage_global_wls.compute_wls_new_estimate_regressor(
+                        robot.global_msg, robot.robot_name)
 
 
 def generate_circle_viapoints(radius, num_points):
