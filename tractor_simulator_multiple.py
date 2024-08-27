@@ -61,7 +61,7 @@ class GenericSimulator(BaseController):
         # 'OPEN_LOOP' 'CLOSED_LOOP_UNICYCLE' 'CLOSED_LOOP_SLIP_0'
         self.ControlType = 'CLOSED_LOOP_SLIP_0'
         self.SAVE_BAGS = False
-        self.LONG_SLIP_COMPENSATION = 'NN'  # 'NN' 'NONE', "WLS"
+        self.LONG_SLIP_COMPENSATION = 'WLS'  # 'NN' 'NONE', "WLS"
         self.DEBUG = False
         self.t_start = 0.0
         self.pose_init = None
@@ -306,70 +306,74 @@ class GenericSimulator(BaseController):
             plt.axis("equal")
             plt.grid(True)
 
-            # desired command plot
-            plt.figure()
-            plt.subplot(2, 1, 1)
-            plt.title(f'{self.robot_name}')
-            plt.plot(self.time_log, self.ctrl_v_log, "-b", label="REAL")
-            plt.plot(self.time_log, self.v_d_log, "-r", label="desired")
-            plt.legend()
-            plt.ylabel("linear velocity[m/s]")
-            plt.grid(True)
-            plt.subplot(2, 1, 2)
-            plt.plot(self.time_log, self.ctrl_omega_log, "-b", label="REAL")
-            plt.plot(self.time_log, self.omega_d_log, "-r", label="desired")
-            plt.legend()
-            plt.xlabel("time[sec]")
-            plt.ylabel("angular velocity[rad/s]")
-            plt.grid(True)
+            # # desired command plot
+            # plt.figure()
+            # plt.subplot(2, 1, 1)
+            # plt.title(f'{self.robot_name}')
+            # plt.plot(self.time_log, self.ctrl_v_log, "-b", label="REAL")
+            # plt.plot(self.time_log, self.v_d_log, "-r", label="desired")
+            # plt.legend()
+            # plt.ylabel("linear velocity[m/s]")
+            # plt.grid(True)
+            # plt.subplot(2, 1, 2)
+            # plt.plot(self.time_log, self.ctrl_omega_log, "-b", label="REAL")
+            # plt.plot(self.time_log, self.omega_d_log, "-r", label="desired")
+            # plt.legend()
+            # plt.xlabel("time[sec]")
+            # plt.ylabel("angular velocity[rad/s]")
+            # plt.grid(True)
 
-            # plotJoint('position', self.time_log, q_log=self.q_log, q_des_log=self.q_des_log, joint_names=self.joint_names)
-            # joint velocities with limits
-            plt.figure()
-            plt.subplot(2, 1, 1)
-            plt.title(f'{self.robot_name}')
-            plt.plot(self.time_log, self.qd_log[0, :], "-b",  linewidth=3)
-            plt.plot(self.time_log, self.qd_des_log[0, :], "-r",  linewidth=4)
-            plt.plot(self.time_log, constants.MAXSPEED_RADS_PULLEY *
-                     np.ones((len(self.time_log))), "-k",  linewidth=4)
-            plt.plot(self.time_log, -constants.MAXSPEED_RADS_PULLEY *
-                     np.ones((len(self.time_log))), "-k",  linewidth=4)
-            plt.ylabel("WHEEL_L")
-            plt.grid(True)
-            plt.subplot(2, 1, 2)
-            plt.plot(self.time_log, self.qd_log[1, :], "-b",  linewidth=3)
-            plt.plot(self.time_log, self.qd_des_log[1, :], "-r",  linewidth=4)
-            plt.plot(self.time_log, constants.MAXSPEED_RADS_PULLEY *
-                     np.ones((len(self.time_log))), "-k",  linewidth=4)
-            plt.plot(self.time_log, -constants.MAXSPEED_RADS_PULLEY *
-                     np.ones((len(self.time_log))), "-k",  linewidth=4)
-            plt.ylabel("WHEEL_R")
-            plt.grid(True)
+            # # plotJoint('position', self.time_log, q_log=self.q_log, q_des_log=self.q_des_log, joint_names=self.joint_names)
+            # # joint velocities with limits
+            # plt.figure()
+            # plt.subplot(2, 1, 1)
+            # plt.title(f'{self.robot_name}')
+            # plt.plot(self.time_log, self.qd_log[0, :], "-b",  linewidth=3)
+            # plt.plot(self.time_log, self.qd_des_log[0, :], "-r",  linewidth=4)
+            # plt.plot(self.time_log, constants.MAXSPEED_RADS_PULLEY *
+            #          np.ones((len(self.time_log))), "-k",  linewidth=4)
+            # plt.plot(self.time_log, -constants.MAXSPEED_RADS_PULLEY *
+            #          np.ones((len(self.time_log))), "-k",  linewidth=4)
+            # plt.ylabel("WHEEL_L")
+            # plt.grid(True)
+            # plt.subplot(2, 1, 2)
+            # plt.plot(self.time_log, self.qd_log[1, :], "-b",  linewidth=3)
+            # plt.plot(self.time_log, self.qd_des_log[1, :], "-r",  linewidth=4)
+            # plt.plot(self.time_log, constants.MAXSPEED_RADS_PULLEY *
+            #          np.ones((len(self.time_log))), "-k",  linewidth=4)
+            # plt.plot(self.time_log, -constants.MAXSPEED_RADS_PULLEY *
+            #          np.ones((len(self.time_log))), "-k",  linewidth=4)
+            # plt.ylabel("WHEEL_R")
+            # plt.grid(True)
 
-            # states plot
-            # base position
-            plotFrameLinear(name='position', title=f'{self.robot_name}', time_log=self.time_log,
-                            des_Pose_log=self.des_state_log, Pose_log=self.state_log)            # base velocity
-            # plotFrameLinear(name='velocity', title=f'{self.robot_name}', time_log=self.time_log, Twist_log=np.vstack(
-            #     (self.baseTwistW_log[:2, :], self.baseTwistW_log[5, :])))
+            # # states plot
+            # # base position
+            # plotFrameLinear(name='position', title=f'{self.robot_name}', time_log=self.time_log,
+            #                 des_Pose_log=self.des_state_log, Pose_log=self.state_log)            # base velocity
+            # # plotFrameLinear(name='velocity', title=f'{self.robot_name}', time_log=self.time_log, Twist_log=np.vstack(
+            # #     (self.baseTwistW_log[:2, :], self.baseTwistW_log[5, :])))
 
             # slippage vars
             plt.figure()
+            plt.title(f'{self.robot_name}')
             plt.subplot(3, 1, 1)
             plt.plot(self.time_log, self.beta_l_log, "-b", label="real")
-            plt.plot(self.time_log, self.beta_l_control_log, "-r", label="control")
+            plt.plot(self.time_log, self.beta_l_control_log,
+                     "-r", label="control")
             plt.ylabel("beta_l")
             plt.legend()
             plt.grid(True)
             plt.subplot(3, 1, 2)
             plt.plot(self.time_log, self.beta_r_log, "-b", label="real")
-            plt.plot(self.time_log, self.beta_r_control_log, "-r", label="control")
+            plt.plot(self.time_log, self.beta_r_control_log,
+                     "-r", label="control")
             plt.ylabel("beta_r")
             plt.legend()
             plt.grid(True)
             plt.subplot(3, 1, 3)
             plt.plot(self.time_log, self.alpha_log, "-b", label="real")
-            plt.plot(self.time_log, self.alpha_control_log, "-r", label="control")
+            plt.plot(self.time_log, self.alpha_control_log,
+                     "-r", label="control")
             plt.ylabel("alpha")
             plt.ylim([-0.4, 0.4])
             plt.grid(True)
@@ -378,8 +382,10 @@ class GenericSimulator(BaseController):
             # tracking errors
             self.log_e_x, self.log_e_y, self.log_e_theta = self.controller.getErrors()
             plt.figure()
+            plt.title(f'{self.robot_name}')
             plt.subplot(2, 1, 1)
-            exy = np.sqrt(np.power(self.log_e_x, 2) + np.power(self.log_e_y, 2))
+            exy = np.sqrt(np.power(self.log_e_x, 2) +
+                          np.power(self.log_e_y, 2))
             plt.plot(exy, "-b")
             plt.ylabel("exy")
             plt.title("tracking error")
@@ -474,8 +480,9 @@ class GenericSimulator(BaseController):
         self.pub_des_jstate.publish(msg)  # publish in /commands
 
         # trigger simulators
-        if np.any(qd_des > np.array([constants.MAXSPEED_RADS_PULLEY, constants.MAXSPEED_RADS_PULLEY])) or np.any(qd_des < -np.array([constants.MAXSPEED_RADS_PULLEY, constants.MAXSPEED_RADS_PULLEY])):
-            print(colored("wheel speed beyond limits, NN might do wrong predictions", "red"))
+        if (np.any(qd_des > np.array([constants.MAXSPEED_RADS_PULLEY, constants.MAXSPEED_RADS_PULLEY])) or np.any(qd_des < -np.array([constants.MAXSPEED_RADS_PULLEY, constants.MAXSPEED_RADS_PULLEY]))) and self.LONG_SLIP_COMPENSATION == "NN":
+            print(
+                colored("wheel speed beyond limits, NN might do wrong predictions", "red"))
         self.tracked_vehicle_simulator.simulateOneStep(qd_des[0], qd_des[1])
         pose, pose_der = self.tracked_vehicle_simulator.getRobotState()
         # fill in base state
@@ -601,14 +608,19 @@ def generate_grid_msg(groundMap, data_path):
     friction_coeff_matrix = np.array([[groundMap.map[i][j].friction_coefficient for j in range(
         groundMap.j_max+1)] for i in range(groundMap.i_max+1)])
 
-    print(friction_coeff_matrix)
+    
+
+    # Normalize the data to a custom range to accentuate differences
+    friction_coeff_normalized = friction_coeff_matrix / np.max(friction_coeff_matrix)
+    
+    print(friction_coeff_normalized)
 
     plt.matshow(friction_coeff_matrix, vmin=0, cmap='Greys_r')
     plt.colorbar()
     plt.savefig(f'{data_path}/grid_friction.png')
 
     # Normalize friction coefficients to the range 0-100 for OccupancyGrid (0-100 indicates probability, -1 is unknown)
-    normalized_friction = (friction_coeff_matrix *
+    normalized_friction = (friction_coeff_normalized *
                            100).astype(np.int8).flatten()
 
     # Create the OccupancyGrid message
@@ -740,7 +752,7 @@ def talker(n_robots, robots, trajectory, groundMap, data_path):
                 robot.q_des, robot.qd_des, robot.tau_ffwd)
 
             # save data with low freq
-            if time_global % 0.5 == 0 and time_global > 5:
+            if time_global % 0.5 == 0 and time_global > 0:
                 observation = pd.DataFrame({
                     'wheel_l': [wheel_l],
                     'wheel_r': [wheel_r],
@@ -767,10 +779,10 @@ def talker(n_robots, robots, trajectory, groundMap, data_path):
         time_global = np.round(
             time_global + np.array([conf.global_dt]), 3)
 
-        if time_global>smoothing_period:
+        if time_global > smoothing_period:
             smoothing_factor = 1.
         else:
-            smoothing_factor+=conf.global_dt/smoothing_period
+            smoothing_factor += conf.global_dt/smoothing_period
         time_ref = np.round(
             time_ref + np.array([conf.global_dt])*smoothing_factor, 3)
 
@@ -863,10 +875,10 @@ if __name__ == '__main__':
                                [-2.,  2.5]])
 
     # traj_viapoints = generate_circle_viapoints(2.5, 20)
-    traj_t_tot = 20.
+    traj_t_tot = 28.
     trajectory = LoopTrajectory(traj_viapoints, traj_t_tot)
 
-    n_tractors = 1
+    n_tractors = 5
 
     tractors = []
 
@@ -890,6 +902,6 @@ if __name__ == '__main__':
 
     for tractor in tractors:
         tractor.deregister_node()
-        if tractor.DEBUG:
-            tractor.plotData()
+        # if tractor.DEBUG:
+        #     tractor.plotData()
         tractor.plotData()
