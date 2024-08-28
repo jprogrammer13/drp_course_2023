@@ -409,14 +409,14 @@ class GenericSimulator(BaseController):
 
     def estimateSlippages(self, W_baseTwist, theta, qd):
 
-        wheel_L = qd[0] + np.random.normal()*1e-4
-        wheel_R = qd[1] + np.random.normal()*1e-4
+        wheel_L = qd[0] + np.random.normal(0, 0.01)
+        wheel_R = qd[1] + np.random.normal(0, 0.01)
         w_vel_xy = np.zeros(2)
         w_vel_xy[0] = W_baseTwist[self.u.sp_crd["LX"]] + \
-            (np.random.normal()*1e-4)
+            (np.random.normal(0, 0.02))
         w_vel_xy[1] = W_baseTwist[self.u.sp_crd["LY"]] + \
-            (np.random.normal()*1e-4)
-        omega = W_baseTwist[self.u.sp_crd["AZ"]] + (np.random.normal()*1e-4)
+            (np.random.normal(0, 0.02))
+        omega = W_baseTwist[self.u.sp_crd["AZ"]] + (np.random.normal(0, 0.01))
 
         # compute BF velocity
         w_R_b = np.array([[np.cos(theta), -np.sin(theta)],
@@ -607,12 +607,13 @@ def generate_path_msg(trajectory):
 def generate_grid_msg(groundMap, data_path):
     friction_coeff_matrix = np.array([[groundMap.map[i][j].friction_coefficient for j in range(
         groundMap.j_max+1)] for i in range(groundMap.i_max+1)])
+    
+    print("friction map: ", friction_coeff_matrix)
 
     # Normalize the data to a custom range to accentuate differences
     friction_coeff_normalized = friction_coeff_matrix / \
         np.max(friction_coeff_matrix)
 
-    print(friction_coeff_normalized)
 
     plt.matshow(friction_coeff_matrix, vmin=0, cmap='Greys_r')
     plt.colorbar()
@@ -751,7 +752,7 @@ def talker(n_robots, robots, trajectory, groundMap, data_path):
                 robot.q_des, robot.qd_des, robot.tau_ffwd)
 
             # save data with low freq
-            if time_global % 0.5 == 0 and time_global > 0:
+            if time_global % 0.5 == 0 and time_global > 1:
                 observation = pd.DataFrame({
                     'wheel_l': [wheel_l],
                     'wheel_r': [wheel_r],
@@ -766,7 +767,7 @@ def talker(n_robots, robots, trajectory, groundMap, data_path):
                     [robot.data, observation], ignore_index=True)
 
             # Estimate local regressor
-            if time_global % 5 == 0 and time_global != 0:
+            if time_global % 30 == 0 and time_global != 0:
                 print(f"{robot.robot_name} computing wls...")
                 robot.map_slippage_local_wls.compute_wls_regressor(robot.data)
                 robot.local_msg = robot.map_slippage_local_wls.generate_msg()
@@ -788,7 +789,7 @@ def talker(n_robots, robots, trajectory, groundMap, data_path):
         if np.mod(time_global, 1) == 0:
             print(colored(f"TIME: {time_global}", "red"))
 
-        if time_global % 6 == 0 and time_global != 0:
+        if time_global % 31 == 0 and time_global != 0:
 
             # Emulate token-ring comunication
             for i in range((n_robots*2)-1):
@@ -901,6 +902,9 @@ if __name__ == '__main__':
     for tractor in tractors:
         df = pd.concat([tractor.data, df], ignore_index=True)
 
+    # Save full data
+    df.to_csv(f"{data_path}/robot_data.csv")
+    print("Data exported")
     # plot_wls(tractors[0].map_slippage_global_wls, df, 'beta_l', 0)
     # plot_wls(tractors[0].map_slippage_global_wls, df, 'beta_r', 1)
     # plot_wls(tractors[0].map_slippage_global_wls, df, 'alpha', 2)

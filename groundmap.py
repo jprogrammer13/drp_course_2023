@@ -13,10 +13,10 @@ class GroundMap:
         friction_coeffs = [0.1, 0.1568, 0.09041, 0.13349]
 
         # Initialize the map with Ground objects
-        self.map = [[Ground(friction_coefficient=friction_coeffs[np.random.randint(0, 3)])
-                     for _ in range(0, width, size)] for _ in range(0, height, size)]
-        # self.map = [[Ground(friction_coefficient=0.08)
-        #              for _ in range(width)] for _ in range(height)]
+        # self.map = [[Ground(friction_coefficient=friction_coeffs[np.random.randint(0, 3)])
+        #              for _ in range(0, width, size)] for _ in range(0, height, size)]
+        self.map = [[Ground(friction_coefficient=0.1)
+                     for _ in range(width)] for _ in range(height)]
 
         # Calculate the coordinate range
         self.x_min = -width / 2
