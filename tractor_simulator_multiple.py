@@ -409,14 +409,12 @@ class GenericSimulator(BaseController):
 
     def estimateSlippages(self, W_baseTwist, theta, qd):
 
-        wheel_L = qd[0] + np.random.normal(0, 0.01)
-        wheel_R = qd[1] + np.random.normal(0, 0.01)
+        wheel_L = qd[0] #+ np.random.normal(0, 0.01)
+        wheel_R = qd[1] #+ np.random.normal(0, 0.01)
         w_vel_xy = np.zeros(2)
-        w_vel_xy[0] = W_baseTwist[self.u.sp_crd["LX"]] + \
-            (np.random.normal(0, 0.02))
-        w_vel_xy[1] = W_baseTwist[self.u.sp_crd["LY"]] + \
-            (np.random.normal(0, 0.02))
-        omega = W_baseTwist[self.u.sp_crd["AZ"]] + (np.random.normal(0, 0.01))
+        w_vel_xy[0] = W_baseTwist[self.u.sp_crd["LX"]] # + \(np.random.normal(0, 0.02))
+        w_vel_xy[1] = W_baseTwist[self.u.sp_crd["LY"]] #+ \(np.random.normal(0, 0.02))
+        omega = W_baseTwist[self.u.sp_crd["AZ"]]# + (np.random.normal(0, 0.01))
 
         # compute BF velocity
         w_R_b = np.array([[np.cos(theta), -np.sin(theta)],
@@ -881,7 +879,7 @@ if __name__ == '__main__':
                                [-2.,  2.5]])
 
     # traj_viapoints = generate_circle_viapoints(2.5, 20)
-    traj_t_tot = 28.
+    traj_t_tot = 60.
     trajectory = LoopTrajectory(traj_viapoints, traj_t_tot)
 
     n_tractors = 5
