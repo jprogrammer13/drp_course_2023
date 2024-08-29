@@ -409,12 +409,14 @@ class GenericSimulator(BaseController):
 
     def estimateSlippages(self, W_baseTwist, theta, qd):
 
-        wheel_L = qd[0] #+ np.random.normal(0, 0.01)
-        wheel_R = qd[1] #+ np.random.normal(0, 0.01)
+        wheel_L = qd[0] + np.random.normal(0, 0.01)
+        wheel_R = qd[1] + np.random.normal(0, 0.01)
         w_vel_xy = np.zeros(2)
-        w_vel_xy[0] = W_baseTwist[self.u.sp_crd["LX"]] # + \(np.random.normal(0, 0.02))
-        w_vel_xy[1] = W_baseTwist[self.u.sp_crd["LY"]] #+ \(np.random.normal(0, 0.02))
-        omega = W_baseTwist[self.u.sp_crd["AZ"]]# + (np.random.normal(0, 0.01))
+        w_vel_xy[0] = W_baseTwist[self.u.sp_crd["LX"]] + \
+            (np.random.normal(0, 0.02))
+        w_vel_xy[1] = W_baseTwist[self.u.sp_crd["LY"]] + \
+            (np.random.normal(0, 0.02))
+        omega = W_baseTwist[self.u.sp_crd["AZ"]] + (np.random.normal(0, 0.01))
 
         # compute BF velocity
         w_R_b = np.array([[np.cos(theta), -np.sin(theta)],
@@ -605,13 +607,12 @@ def generate_path_msg(trajectory):
 def generate_grid_msg(groundMap, data_path):
     friction_coeff_matrix = np.array([[groundMap.map[i][j].friction_coefficient for j in range(
         groundMap.j_max+1)] for i in range(groundMap.i_max+1)])
-    
+
     print("friction map: ", friction_coeff_matrix)
 
     # Normalize the data to a custom range to accentuate differences
     friction_coeff_normalized = friction_coeff_matrix / \
         np.max(friction_coeff_matrix)
-
 
     plt.matshow(friction_coeff_matrix, vmin=0, cmap='Greys_r')
     plt.colorbar()
@@ -648,7 +649,7 @@ def generate_grid_msg(groundMap, data_path):
     return grid_msg
 
 
-def talker(n_robots, robots, trajectory, groundMap, data_path):
+def talker(n_robots, robots, trajectory, groundMap, data_path, traj_t_tot):
     global df
     # common stuff
 
@@ -765,7 +766,7 @@ def talker(n_robots, robots, trajectory, groundMap, data_path):
                     [robot.data, observation], ignore_index=True)
 
             # Estimate local regressor
-            if time_global % 30 == 0 and time_global != 0:
+            if time_global % (traj_t_tot//2) == 0 and time_global >= traj_t_tot:
                 print(f"{robot.robot_name} computing wls...")
                 robot.map_slippage_local_wls.compute_wls_regressor(robot.data)
                 robot.local_msg = robot.map_slippage_local_wls.generate_msg()
@@ -787,7 +788,7 @@ def talker(n_robots, robots, trajectory, groundMap, data_path):
         if np.mod(time_global, 1) == 0:
             print(colored(f"TIME: {time_global}", "red"))
 
-        if time_global % 31 == 0 and time_global != 0:
+        if time_global % ((traj_t_tot//2)+1) == 0 and time_global >= traj_t_tot:
 
             # Emulate token-ring comunication
             for i in range((n_robots*2)-1):
@@ -868,15 +869,33 @@ if __name__ == '__main__':
     groundMap = GroundMap(9, 9, 3)
     # groundMap = GroundMap(6, 6)
 
-    traj_viapoints = np.array([[-4.,  0.5],
-                               [-1.5, -3.],
-                               [0., -4.],
-                               [2., -3.],
-                               [4.,  0.5],
-                               [3.,  3.],
-                               [1.5,  4.],
-                               [0.,  2.9],
-                               [-2.,  2.5]])
+    # traj_viapoints = np.array([[-4.,  0.5],
+    #                            [-1.5, -3.],
+    #                            [0., -4.],
+    #                            [2., -3.],
+    #                            [4.,  0.5],
+    #                            [3.,  3.],
+    #                            [1.5,  4.],
+    #                            [0.,  2.9],
+    #                            [-2.,  2.5]])
+
+    traj_viapoints = np.array([[-4.,  1],
+                               [-3.5,  -0.7],
+                               [-3,  -3],
+                               [-1.5, -3.5],
+                               [-0.3, -4.],
+                               [1, -3.5],
+                               [2.5, -4],
+                               [3.5, -2.5],
+                               [4, -1.],
+                               [3.5,  0.5],
+                               [4,  2],
+                               [3.5,  3.5],
+                               [2.,  4],
+                               [0.,  3.],
+                               [-1.5,  2.5],
+                               [-2.5,  3.],
+                               [-3.5, 2.5]])
 
     # traj_viapoints = generate_circle_viapoints(2.5, 20)
     traj_t_tot = 50.
@@ -890,7 +909,8 @@ if __name__ == '__main__':
         tractor = GenericSimulator(f"tractor{i}")
         tractors.append(tractor)
     try:
-        talker(n_tractors, tractors, trajectory, groundMap, data_path)
+        talker(n_tractors, tractors, trajectory,
+               groundMap, data_path, traj_t_tot)
     except (ros.ROSInterruptException, ros.service.ServiceException):
         pass
     ros.signal_shutdown("killed")
