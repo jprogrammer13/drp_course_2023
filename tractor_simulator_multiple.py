@@ -879,7 +879,7 @@ if __name__ == '__main__':
                                [-2.,  2.5]])
 
     # traj_viapoints = generate_circle_viapoints(2.5, 20)
-    traj_t_tot = 60.
+    traj_t_tot = 50.
     trajectory = LoopTrajectory(traj_viapoints, traj_t_tot)
 
     n_tractors = 5
