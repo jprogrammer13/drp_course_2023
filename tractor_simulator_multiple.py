@@ -770,6 +770,7 @@ def talker(n_robots, robots, trajectory, groundMap, data_path, traj_t_tot):
                 print(f"{robot.robot_name} computing wls...")
                 robot.map_slippage_local_wls.compute_wls_regressor(robot.data)
                 robot.local_msg = robot.map_slippage_local_wls.generate_msg()
+
                 # Send data to the other robots in a
 
         # wait for synconization of the control loop
@@ -802,14 +803,21 @@ def talker(n_robots, robots, trajectory, groundMap, data_path, traj_t_tot):
             # Once everyone has all the local estimates, compute the global
             for i, robot in enumerate(robots):
                 print(f"tractor{i} computing global wls...")
-                # robot.map_slippage_global_wls.compute_wls_regressor(
-                #     robot.global_msg)
-                if time_global <= 6:
-                    robot.map_slippage_global_wls.compute_wls_regressor(
-                        robot.global_msg)
-                else:
-                    robot.map_slippage_global_wls.compute_wls_new_estimate_regressor(
-                        robot.global_msg, robot.robot_name)
+                robot.map_slippage_global_wls.compute_wls_regressor(
+                    robot.global_msg)
+                # if time_global <= traj_t_tot+10:
+                #     robot.map_slippage_global_wls.compute_wls_regressor(
+                #         robot.global_msg)
+                # else:
+                #     robot.map_slippage_global_wls.compute_wls_new_estimate_regressor(
+                #         robot.global_msg, robot.robot_name)
+
+                print('--------------------------------')
+                print(
+                    robot.map_slippage_global_wls.map_wls_regressors[0][1].theta)
+                print(
+                    robot.map_slippage_local_wls.map_wls_regressors[0][1].theta)
+                print('--------------------------------')
 
 
 def generate_circle_viapoints(radius, num_points):
@@ -898,7 +906,7 @@ if __name__ == '__main__':
                                [-3.5, 2.5]])
 
     # traj_viapoints = generate_circle_viapoints(2.5, 20)
-    traj_t_tot = 50.
+    traj_t_tot = 52.
     trajectory = LoopTrajectory(traj_viapoints, traj_t_tot)
 
     n_tractors = 5
