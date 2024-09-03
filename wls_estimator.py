@@ -18,7 +18,9 @@ class Model():
             X = np.column_stack((X, omega_l**d, omega_r**d))
 
         Y = X @ self.theta
-        Y = np.clip(Y, -1, 1)
+        # For safety if the input is out of range, return 0
+        if omega_l > 11 or omega_r > 11 or omega_l < 0 or omega_r < 0:
+            Y *= 0
         return Y
 
 
@@ -110,7 +112,6 @@ class MapSlippageLocalWLSEstimator():
                 if len(filtered) > 3:
                     self.map_wls_regressors[i][j].F, self.map_wls_regressors[i][j].a, self.map_wls_regressors[i][j].theta = self.local_estimate(
                         filtered)
-
 
     def generate_msg(self):
         msg = {self.id: {}}
