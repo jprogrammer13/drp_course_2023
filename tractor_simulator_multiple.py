@@ -62,7 +62,7 @@ class GenericSimulator(BaseController):
         # 'OPEN_LOOP' 'CLOSED_LOOP_UNICYCLE' 'CLOSED_LOOP_SLIP_0'
         self.ControlType = 'CLOSED_LOOP_SLIP_0'
         self.SAVE_BAGS = False
-        self.LONG_SLIP_COMPENSATION = 'WLS'  # 'NN' 'NONE', "WLS"
+        self.LONG_SLIP_COMPENSATION = 'EXP'  # 'NN' 'NONE', "WLS"
         self.DEBUG = False
         self.t_start = 0.0
         self.pose_init = None
@@ -187,11 +187,17 @@ class GenericSimulator(BaseController):
                     os.environ['LOCOSIM_DIR'] + '/robot_control/base_controllers/tracked_robot/regressor/model_beta_r.cb')
                 self.model_alpha = self.regressor_alpha.load_model(
                     os.environ['LOCOSIM_DIR'] + '/robot_control/base_controllers/tracked_robot/regressor/model_alpha.cb')
+                
             elif self.LONG_SLIP_COMPENSATION == "WLS":
                 # Initialize only the structure, then update the weights
                 self.model_beta_l = Model()
                 self.model_beta_r = Model()
                 self.model_alpha = Model()
+
+            elif self.LONG_SLIP_COMPENSATION == "EXP":
+                self.model_beta_l = None
+                self.model_beta_r = None
+                self.model_alpha = None
 
         except:
             print(colored(
@@ -351,25 +357,27 @@ class GenericSimulator(BaseController):
 
             if data_path is not None:
                 joblib.dump(self.des_state_log, os.path.join(
-                    data_path, 'des_state.bin'))
+                    data_path, f'{self.LONG_SLIP_COMPENSATION}_des_state.bin'))
                 joblib.dump(self.state_log, os.path.join(
-                    data_path, 'state.bin'))
+                    data_path, f'{self.LONG_SLIP_COMPENSATION}_state.bin'))
                 joblib.dump(self.beta_l_log, os.path.join(
-                    data_path, 'beta_l.bin'))
+                    data_path, f'{self.LONG_SLIP_COMPENSATION}_beta_l.bin'))
                 joblib.dump(self.beta_l_control_log, os.path.join(
-                    data_path, 'beta_l_pred.bin'))
+                    data_path, f'{self.LONG_SLIP_COMPENSATION}_beta_l_pred.bin'))
                 joblib.dump(self.beta_r_log, os.path.join(
-                    data_path, 'beta_r.bin'))
+                    data_path, f'{self.LONG_SLIP_COMPENSATION}_beta_r.bin'))
                 joblib.dump(self.beta_r_control_log, os.path.join(
-                    data_path, 'beta_r_pred.bin'))
+                    data_path, f'{self.LONG_SLIP_COMPENSATION}_beta_r_pred.bin'))
                 joblib.dump(self.alpha_log, os.path.join(
-                    data_path, 'alpha.bin'))
+                    data_path, f'{self.LONG_SLIP_COMPENSATION}_alpha.bin'))
                 joblib.dump(self.alpha_control_log, os.path.join(
-                    data_path, 'alpha_pred.bin'))
-                joblib.dump(self.log_e_x, os.path.join(data_path, 'ex.bin'))
-                joblib.dump(self.log_e_y, os.path.join(data_path, 'ey.bin'))
+                    data_path, f'{self.LONG_SLIP_COMPENSATION}_alpha_pred.bin'))
+                joblib.dump(self.log_e_x, os.path.join(
+                    data_path, f'{self.LONG_SLIP_COMPENSATION}_ex.bin'))
+                joblib.dump(self.log_e_y, os.path.join(
+                    data_path, f'{self.LONG_SLIP_COMPENSATION}_ey.bin'))
                 joblib.dump(self.log_e_theta, os.path.join(
-                    data_path, 'etheta.bin'))
+                    data_path, f'{self.LONG_SLIP_COMPENSATION}_etheta.bin'))
                 joblib.dump(self.time_log, os.path.join(data_path, 'time.bin'))
 
     def mapToWheels(self, v_des, omega_des):
@@ -444,6 +452,43 @@ class GenericSimulator(BaseController):
         qd_comp = np.zeros(2)
         qd_comp[0] = 1 / constants.SPROCKET_RADIUS * v_enc_l
         qd_comp[1] = 1 / constants.SPROCKET_RADIUS * v_enc_r
+        return qd_comp, beta_l, beta_r
+
+    def computeLongSlipCompensationExp(self, v, omega, qd_des, constants):
+        # in the case radius is infinite, betas are zero (this is to avoid Nans)
+
+        if (abs(omega) < 1e-05) and (abs(v) > 1e-05):
+            radius = 1e08 * np.sign(v)
+        elif (abs(omega) < 1e-05) and (abs(v) < 1e-05):
+            radius = 1e8
+        else:
+            radius = v / (omega)
+
+        # compute track velocity from encoder
+        v_enc_l = constants.SPROCKET_RADIUS*qd_des[0]
+        v_enc_r = constants.SPROCKET_RADIUS*qd_des[1]
+
+        # estimate beta_inner, beta_outer from turning radius
+        if (radius >= 0.0):  # turning left, positive radius, left wheel is inner right wheel is outer
+            beta_l = constants.beta_slip_inner_coefficients_left[0]*np.exp(
+                constants.beta_slip_inner_coefficients_left[1]*radius)
+            v_enc_l += beta_l
+            beta_r = constants.beta_slip_outer_coefficients_left[0]*np.exp(
+                constants.beta_slip_outer_coefficients_left[1]*radius)
+            v_enc_r += beta_r
+
+        else:  # turning right, negative radius, left wheel is outer right is inner
+            beta_r = constants.beta_slip_inner_coefficients_right[0]*np.exp(
+                constants.beta_slip_inner_coefficients_right[1]*radius)
+            v_enc_r += beta_r
+            beta_l = constants.beta_slip_outer_coefficients_right[0]*np.exp(
+                constants.beta_slip_outer_coefficients_right[1]*radius)
+            v_enc_l += beta_l
+
+        qd_comp = np.zeros(2)
+        qd_comp[0] = 1/constants.SPROCKET_RADIUS * v_enc_l
+        qd_comp[1] = 1/constants.SPROCKET_RADIUS * v_enc_r
+
         return qd_comp, beta_l, beta_r
 
     def send_des_jstate(self, q_des, qd_des, tau_ffwd):
@@ -717,6 +762,9 @@ def talker(n_robots, robots, trajectory, groundMap, data_path, traj_t_tot):
                 if robot.LONG_SLIP_COMPENSATION == 'NN' or robot.LONG_SLIP_COMPENSATION == 'WLS':
                     robot.qd_des, robot.beta_l_control, robot.beta_r_control = robot.computeLongSlipCompensationNN(
                         robot.qd_des, constants)
+                if robot.LONG_SLIP_COMPENSATION == 'EXP':
+                    robot.qd_des, robot.beta_l_control, robot.beta_r_control = robot.computeLongSlipCompensationExp(
+                        robot.ctrl_v, robot.ctrl_omega, robot.qd_des, constants)
 
             # # note there is only a ros_impedance controller, not a joint_group_vel controller, so I can only set velocity by integrating the wheel speed and
             # # senting it to be tracked from the impedance loop
@@ -785,7 +833,7 @@ def talker(n_robots, robots, trajectory, groundMap, data_path, traj_t_tot):
                 else:
                     robot.map_slippage_global_wls.compute_wls_new_estimate_regressor(
                         robot.global_msg, robot.robot_name)
-                    
+
         if time_global == 300:
             print("Ending simulation...")
             break
