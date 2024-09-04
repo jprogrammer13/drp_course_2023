@@ -26,6 +26,7 @@ from matplotlib import pyplot as plt
 from numpy import nan
 import rospkg
 import os
+import joblib
 import params as conf
 import pandas as pd
 from base_controllers.utils.common_functions import plotFrameLinear, plotJoint, sendStaticTransform, launchFileGeneric, launchFileNode
@@ -290,7 +291,7 @@ class GenericSimulator(BaseController):
     def startupProcedure(self):
         self.basePoseW[2] = conf.robot_params[self.robot_name]['spawn_z']
 
-    def plotData(self):
+    def plotData(self, data_path=None):
         if conf.plotting:
             # xy plot
             # xy plot
@@ -305,53 +306,6 @@ class GenericSimulator(BaseController):
             plt.ylabel("y[m]")
             plt.axis("equal")
             plt.grid(True)
-
-            # # desired command plot
-            # plt.figure()
-            # plt.subplot(2, 1, 1)
-            # plt.title(f'{self.robot_name}')
-            # plt.plot(self.time_log, self.ctrl_v_log, "-b", label="REAL")
-            # plt.plot(self.time_log, self.v_d_log, "-r", label="desired")
-            # plt.legend()
-            # plt.ylabel("linear velocity[m/s]")
-            # plt.grid(True)
-            # plt.subplot(2, 1, 2)
-            # plt.plot(self.time_log, self.ctrl_omega_log, "-b", label="REAL")
-            # plt.plot(self.time_log, self.omega_d_log, "-r", label="desired")
-            # plt.legend()
-            # plt.xlabel("time[sec]")
-            # plt.ylabel("angular velocity[rad/s]")
-            # plt.grid(True)
-
-            # # plotJoint('position', self.time_log, q_log=self.q_log, q_des_log=self.q_des_log, joint_names=self.joint_names)
-            # # joint velocities with limits
-            # plt.figure()
-            # plt.subplot(2, 1, 1)
-            # plt.title(f'{self.robot_name}')
-            # plt.plot(self.time_log, self.qd_log[0, :], "-b",  linewidth=3)
-            # plt.plot(self.time_log, self.qd_des_log[0, :], "-r",  linewidth=4)
-            # plt.plot(self.time_log, constants.MAXSPEED_RADS_PULLEY *
-            #          np.ones((len(self.time_log))), "-k",  linewidth=4)
-            # plt.plot(self.time_log, -constants.MAXSPEED_RADS_PULLEY *
-            #          np.ones((len(self.time_log))), "-k",  linewidth=4)
-            # plt.ylabel("WHEEL_L")
-            # plt.grid(True)
-            # plt.subplot(2, 1, 2)
-            # plt.plot(self.time_log, self.qd_log[1, :], "-b",  linewidth=3)
-            # plt.plot(self.time_log, self.qd_des_log[1, :], "-r",  linewidth=4)
-            # plt.plot(self.time_log, constants.MAXSPEED_RADS_PULLEY *
-            #          np.ones((len(self.time_log))), "-k",  linewidth=4)
-            # plt.plot(self.time_log, -constants.MAXSPEED_RADS_PULLEY *
-            #          np.ones((len(self.time_log))), "-k",  linewidth=4)
-            # plt.ylabel("WHEEL_R")
-            # plt.grid(True)
-
-            # # states plot
-            # # base position
-            # plotFrameLinear(name='position', title=f'{self.robot_name}', time_log=self.time_log,
-            #                 des_Pose_log=self.des_state_log, Pose_log=self.state_log)            # base velocity
-            # # plotFrameLinear(name='velocity', title=f'{self.robot_name}', time_log=self.time_log, Twist_log=np.vstack(
-            # #     (self.baseTwistW_log[:2, :], self.baseTwistW_log[5, :])))
 
             # slippage vars
             plt.figure()
@@ -394,6 +348,29 @@ class GenericSimulator(BaseController):
             plt.plot(self.log_e_theta, "-b")
             plt.ylabel("eth")
             plt.grid(True)
+
+            if data_path is not None:
+                joblib.dump(self.des_state_log, os.path.join(
+                    data_path, 'des_state.bin'))
+                joblib.dump(self.state_log, os.path.join(
+                    data_path, 'state.bin'))
+                joblib.dump(self.beta_l_log, os.path.join(
+                    data_path, 'beta_l.bin'))
+                joblib.dump(self.beta_l_control_log, os.path.join(
+                    data_path, 'beta_l_pred.bin'))
+                joblib.dump(self.beta_r_log, os.path.join(
+                    data_path, 'beta_r.bin'))
+                joblib.dump(self.beta_r_control_log, os.path.join(
+                    data_path, 'beta_r_pred.bin'))
+                joblib.dump(self.alpha_log, os.path.join(
+                    data_path, 'alpha.bin'))
+                joblib.dump(self.alpha_control_log, os.path.join(
+                    data_path, 'alpha_pred.bin'))
+                joblib.dump(self.log_e_x, os.path.join(data_path, 'ex.bin'))
+                joblib.dump(self.log_e_y, os.path.join(data_path, 'ey.bin'))
+                joblib.dump(self.log_e_theta, os.path.join(
+                    data_path, 'etheta.bin'))
+                joblib.dump(self.time_log, os.path.join(data_path, 'time.bin'))
 
     def mapToWheels(self, v_des, omega_des):
         #
@@ -553,11 +530,8 @@ def start_robots(n_robots, robots, trajectory, groundMap):
 
     for robot in robots:
         robot.t_start = t
-        # if robot.DEBUG:
-        #     t += 1
-        # else:
-        #     t += np.random.randint(5, 10)
-        t += np.random.randint(5, 10)
+        if robot.DEBUG:
+            t += 1
 
         robot.global_msg = [None for _ in range(n_robots)]
 
@@ -582,6 +556,8 @@ def start_robots(n_robots, robots, trajectory, groundMap):
 
         # Lyapunov controller parameters
         robot.controller = LyapunovController(params=params)
+
+        t += np.random.randint(5, 10)
 
 
 def generate_path_msg(trajectory):
@@ -766,7 +742,7 @@ def talker(n_robots, robots, trajectory, groundMap, data_path, traj_t_tot):
                     [robot.data, observation], ignore_index=True)
 
             # Estimate local regressor
-            if time_global % (traj_t_tot//2) == 0 and time_global >= traj_t_tot:
+            if robot.LONG_SLIP_COMPENSATION == 'WLS' and time_global % (traj_t_tot//2) == 0 and time_global >= traj_t_tot:
                 print(f"{robot.robot_name} computing wls...")
                 robot.map_slippage_local_wls.compute_wls_regressor(robot.data)
                 robot.local_msg = robot.map_slippage_local_wls.generate_msg()
@@ -789,7 +765,7 @@ def talker(n_robots, robots, trajectory, groundMap, data_path, traj_t_tot):
         if np.mod(time_global, 1) == 0:
             print(colored(f"TIME: {time_global}", "red"))
 
-        if time_global % ((traj_t_tot//2)+1) == 0 and time_global >= traj_t_tot:
+        if robot.LONG_SLIP_COMPENSATION == 'WLS' and time_global % ((traj_t_tot//2)+1) == 0 and time_global >= traj_t_tot:
 
             # Emulate token-ring comunication
             for i in range((n_robots*2)-1):
@@ -809,6 +785,10 @@ def talker(n_robots, robots, trajectory, groundMap, data_path, traj_t_tot):
                 else:
                     robot.map_slippage_global_wls.compute_wls_new_estimate_regressor(
                         robot.global_msg, robot.robot_name)
+                    
+        if time_global == 300:
+            print("Ending simulation...")
+            break
 
 
 def generate_circle_viapoints(radius, num_points):
@@ -823,43 +803,6 @@ def generate_circle_viapoints(radius, num_points):
     viapoints = np.column_stack((x_coords, y_coords))
 
     return viapoints
-
-
-def plot_wls(wls_regressor, data, param_str, param_id):
-    # Create figure and 3x3 subplots
-    fig, axes = plt.subplots(
-        3, 3, subplot_kw={'projection': '3d'}, figsize=(12, 12))
-
-    # Set a large title for the entire figure
-    fig.suptitle(param_str, fontsize=20)
-
-    # Loop through the 3x3 grid to plot something on each subplot
-    for i in range(3):
-        for j in range(3):
-            ax = axes[i, j]
-            df = data[(data.i == i) & (data.j == j)]
-            # Example data: plotting a simple surface
-            wheel_l, wheel_r = np.meshgrid(np.linspace(df["wheel_l"].min(), df["wheel_l"].max(), 100),
-                                           np.linspace(df["wheel_r"].min(), df["wheel_r"].max(), 100))
-            theta = wls_regressor.map_wls_regressors[i][j].theta[:, param_id]
-            wls = theta[0] + theta[1] * wheel_l + theta[2] * wheel_r
-            ax.plot_surface(wheel_l, wheel_r, wls, cmap="viridis")
-            ax.scatter(df["wheel_l"], df["wheel_r"], df[param_str],
-                       color='red')  # Original data points
-            # Optional: adjust fontsize
-            ax.set_title(f"Patch {i}:{j}", fontsize=15)
-            ax.set_xlabel("wheel_l")
-            ax.set_ylabel("wheel_r")
-            # Optional: You can label the z-axis if needed
-            ax.set_zlabel(param_str)
-
-    # Adjust the layout to be compact with more padding
-    # Increase space between subplots
-    plt.subplots_adjust(wspace=0.4, hspace=0.4)
-
-    # Adjust layout to avoid overlap of suptitle
-    # Adjust rect to accommodate the suptitle
-    plt.tight_layout(rect=[0, 0, 1, 1])
 
 
 if __name__ == '__main__':
@@ -922,12 +865,10 @@ if __name__ == '__main__':
     # Save full data
     df.to_csv(f"{data_path}/robot_data.csv")
     print("Data exported")
-    # plot_wls(tractors[0].map_slippage_global_wls, df, 'beta_l', 0)
-    # plot_wls(tractors[0].map_slippage_global_wls, df, 'beta_r', 1)
-    # plot_wls(tractors[0].map_slippage_global_wls, df, 'alpha', 2)
 
     for tractor in tractors:
         tractor.deregister_node()
         # if tractor.DEBUG:
         #     tractor.plotData()
-        tractor.plotData()
+
+    tractors[0].plotData(data_path)
