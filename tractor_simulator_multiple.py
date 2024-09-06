@@ -592,7 +592,9 @@ def start_robots(n_robots, robots, trajectory, groundMap):
         robot.startSimulator()
 
         ground = groundMap.get_ground(x, y)
+        fc = ground.friction_coefficient
         robot.tracked_vehicle_simulator.setGround(ground)
+        
         # DEBUG
         # robot.tracked_vehicle_simulator.NO_SLIPPAGE = True
 
@@ -601,7 +603,8 @@ def start_robots(n_robots, robots, trajectory, groundMap):
 
         # Lyapunov controller parameters
         robot.controller = LyapunovController(params=params)
-
+        robot.controller.C1 = conf.exp_params[fc]["C1"]
+        robot.controller.C2 = conf.exp_params[fc]["C2"]
         t += np.random.randint(5, 10)
 
 
@@ -726,7 +729,11 @@ def talker(n_robots, robots, trajectory, groundMap, data_path, traj_t_tot):
                 # update the ground according on the position
                 ground = groundMap.get_ground(
                     robot.robot_state.x, robot.robot_state.y)
+                
+            fc = ground.friction_coefficient
             robot.tracked_vehicle_simulator.setGround(ground)
+            robot.controller.C1 = conf.exp_params[fc]["C1"]
+            robot.controller.C2 = conf.exp_params[fc]["C2"]
 
             i, j = groundMap.coords_to_index(
                 robot.robot_state.x, robot.robot_state.y)
@@ -888,7 +895,7 @@ if __name__ == '__main__':
                                [-3.5, 2.5]])
 
     # traj_viapoints = generate_circle_viapoints(2.5, 20)
-    traj_t_tot = 50.
+    traj_t_tot = 50
     trajectory = LoopTrajectory(traj_viapoints, traj_t_tot)
 
     n_tractors = 5

@@ -21,6 +21,9 @@ class Model():
         # For safety if the input is out of range, return 0
         if omega_l > 11 or omega_r > 11 or omega_l < 0 or omega_r < 0:
             Y *= 0
+
+        # add safe clipping in case of overhooting
+        Y = np.clip(Y, -1, 1)
         return Y
 
 

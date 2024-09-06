@@ -8,13 +8,15 @@ class GroundMap:
         self.height = height
         self.size = size
 
-        np.random.seed(13)
+        np.random.seed(32)
 
         friction_coeffs = [0.1, 0.1568, 0.09041, 0.13349]
 
         # Initialize the map with Ground objects
-        self.map = [[Ground(friction_coefficient=friction_coeffs[np.random.randint(0, 3)])
+        self.map = [[Ground(friction_coefficient=friction_coeffs[np.random.randint(0, 4)])
                      for _ in range(0, width, size)] for _ in range(0, height, size)]
+        
+        # Debug, enable this to have same terrain
         # self.map = [[Ground(friction_coefficient=0.1)
         #              for _ in range(width)] for _ in range(height)]
 
