@@ -62,7 +62,7 @@ class GenericSimulator(BaseController):
         # 'OPEN_LOOP' 'CLOSED_LOOP_UNICYCLE' 'CLOSED_LOOP_SLIP_0'
         self.ControlType = 'CLOSED_LOOP_SLIP_0'
         self.SAVE_BAGS = False
-        self.LONG_SLIP_COMPENSATION = 'EXP'  # 'NN' 'NONE', "WLS"
+        self.LONG_SLIP_COMPENSATION = 'WLS'  # 'NN' 'NONE', "WLS"
         self.DEBUG = False
         self.t_start = 0.0
         self.pose_init = None
@@ -834,11 +834,7 @@ def talker(n_robots, robots, trajectory, groundMap, data_path, traj_t_tot):
             # Once everyone has all the local estimates, compute the global
             for i, robot in enumerate(robots):
                 print(f"tractor{i} computing global wls...")
-                if time_global <= traj_t_tot+10:
-                    robot.map_slippage_global_wls.compute_wls_regressor(
-                        robot.global_msg)
-                else:
-                    robot.map_slippage_global_wls.compute_wls_new_estimate_regressor(
+                robot.map_slippage_global_wls.compute_wls_regressor(
                         robot.global_msg, robot.robot_name)
 
         if time_global == 300:

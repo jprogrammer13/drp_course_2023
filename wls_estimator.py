@@ -76,9 +76,10 @@ class MapSlippageLocalWLSEstimator():
         # Combine these into a block diagonal matrix
         W = block_diag(W_l, W_r, W_alpha)
 
+        X_expanded = np.kron(np.eye(3), X)
+
         for _ in range(iteration+1):
 
-            X_expanded = np.kron(np.eye(3), X)
             F_0 = X_expanded.T @ W @ X_expanded
             a_0 = X_expanded.T @ W @ Y.flatten(order='F')
             # Now compute WLS using the expanded X and Y
@@ -141,23 +142,6 @@ class MapSlippageDistributedWLSEstimator():
         self.map_wls_regressors = [
             [WLSRegressor() for j in range(width)] for i in range(height)]
 
-    def global_first_estimate(self, msg):
-
-        sum_F = np.zeros((self.matrix_shape, self.matrix_shape))
-        sum_a = np.zeros((self.matrix_shape,))
-
-        for i in msg.keys():
-            if isinstance(msg[i]["F"], np.ndarray):
-                sum_F += msg[i]["F"]
-                sum_a += msg[i]["a"]
-
-        if np.all(sum_F == 0.):
-            beta_hat_wls_global = np.zeros((self.matrix_shape, 1))
-        else:
-            beta_hat_wls_global = np.linalg.inv(sum_F) @ sum_a
-
-        return beta_hat_wls_global.reshape(3, -1).T
-
     def compute_weights(self, msg):
         n_robots = len(msg.keys())
         connection_matrix = np.array([
@@ -180,7 +164,7 @@ class MapSlippageDistributedWLSEstimator():
                         q_ij[i, j] = 0
         return q_ij
 
-    def global_new_estimate(self, msg, robot_id, theta_init):
+    def global_estimate(self, msg, robot_id, theta_init):
 
         sum_F_next = msg[robot_id]["F"]
         sum_a_next = msg[robot_id]["a"]
@@ -203,7 +187,8 @@ class MapSlippageDistributedWLSEstimator():
             beta_hat_wls_global = beta_hat_wls_global.reshape(3, -1).T
         return beta_hat_wls_global
 
-    def compute_wls_regressor(self, msgs):
+
+    def compute_wls_regressor(self, msgs, robot_name):
         for i in range(self.width):
             for j in range(self.height):
                 patch_msg = {}
@@ -213,18 +198,5 @@ class MapSlippageDistributedWLSEstimator():
                     patch_msg[id] = msg[id][i][j]
 
                 # print(list(patch_msg.keys()))
-                self.map_wls_regressors[i][j].theta = self.global_first_estimate(
-                    patch_msg)
-
-    def compute_wls_new_estimate_regressor(self, msgs, robot_name):
-        for i in range(self.width):
-            for j in range(self.height):
-                patch_msg = {}
-                for msg in msgs:
-                    id = list(msg.keys())[0]
-                    # print(id, i, j)
-                    patch_msg[id] = msg[id][i][j]
-
-                # print(list(patch_msg.keys()))
-                self.map_wls_regressors[i][j].theta = self.global_new_estimate(
+                self.map_wls_regressors[i][j].theta = self.global_estimate(
                     patch_msg, robot_name, self.map_wls_regressors[i][j].theta)
