@@ -187,14 +187,14 @@ class GenericSimulator(BaseController):
                     os.environ['LOCOSIM_DIR'] + '/robot_control/base_controllers/tracked_robot/regressor/model_beta_r.cb')
                 self.model_alpha = self.regressor_alpha.load_model(
                     os.environ['LOCOSIM_DIR'] + '/robot_control/base_controllers/tracked_robot/regressor/model_alpha.cb')
-                
+
             elif self.LONG_SLIP_COMPENSATION == "WLS":
                 # Initialize only the structure, then update the weights
                 self.model_beta_l = Model()
                 self.model_beta_r = Model()
                 self.model_alpha = Model()
 
-            elif self.LONG_SLIP_COMPENSATION == "EXP":
+            else:
                 self.model_beta_l = None
                 self.model_beta_r = None
                 self.model_alpha = None
@@ -454,7 +454,7 @@ class GenericSimulator(BaseController):
         qd_comp[1] = 1 / constants.SPROCKET_RADIUS * v_enc_r
         return qd_comp, beta_l, beta_r
 
-    def computeLongSlipCompensationExp(self, v, omega, qd_des, constants):
+    def computeLongSlipCompensationExp(self, v, omega, qd_des, constants, exp_params):
         # in the case radius is infinite, betas are zero (this is to avoid Nans)
 
         if (abs(omega) < 1e-05) and (abs(v) > 1e-05):
@@ -470,19 +470,19 @@ class GenericSimulator(BaseController):
 
         # estimate beta_inner, beta_outer from turning radius
         if (radius >= 0.0):  # turning left, positive radius, left wheel is inner right wheel is outer
-            beta_l = constants.beta_slip_inner_coefficients_left[0]*np.exp(
-                constants.beta_slip_inner_coefficients_left[1]*radius)
+            beta_l = exp_params["b_i_l"][0]*np.exp(
+                exp_params["b_i_l"][1]*radius)
             v_enc_l += beta_l
-            beta_r = constants.beta_slip_outer_coefficients_left[0]*np.exp(
-                constants.beta_slip_outer_coefficients_left[1]*radius)
+            beta_r = exp_params["b_o_l"][0]*np.exp(
+                exp_params["b_o_l"][1]*radius)
             v_enc_r += beta_r
 
         else:  # turning right, negative radius, left wheel is outer right is inner
-            beta_r = constants.beta_slip_inner_coefficients_right[0]*np.exp(
-                constants.beta_slip_inner_coefficients_right[1]*radius)
+            beta_r = exp_params["b_i_r"][0]*np.exp(
+                exp_params["b_i_r"][1]*radius)
             v_enc_r += beta_r
-            beta_l = constants.beta_slip_outer_coefficients_right[0]*np.exp(
-                constants.beta_slip_outer_coefficients_right[1]*radius)
+            beta_l = exp_params["b_o_r"][0]*np.exp(
+                exp_params["b_o_r"][1]*radius)
             v_enc_l += beta_l
 
         qd_comp = np.zeros(2)
@@ -575,6 +575,7 @@ def start_robots(n_robots, robots, trajectory, groundMap):
 
     for robot in robots:
         robot.t_start = t
+        robot.last_log_time = 0
         if robot.DEBUG:
             t += 1
 
@@ -594,7 +595,7 @@ def start_robots(n_robots, robots, trajectory, groundMap):
         ground = groundMap.get_ground(x, y)
         fc = ground.friction_coefficient
         robot.tracked_vehicle_simulator.setGround(ground)
-        
+
         # DEBUG
         # robot.tracked_vehicle_simulator.NO_SLIPPAGE = True
 
@@ -729,7 +730,7 @@ def talker(n_robots, robots, trajectory, groundMap, data_path, traj_t_tot):
                 # update the ground according on the position
                 ground = groundMap.get_ground(
                     robot.robot_state.x, robot.robot_state.y)
-                
+
             fc = ground.friction_coefficient
             robot.tracked_vehicle_simulator.setGround(ground)
             robot.controller.C1 = conf.exp_params[fc]["C1"]
@@ -771,7 +772,7 @@ def talker(n_robots, robots, trajectory, groundMap, data_path, traj_t_tot):
                         robot.qd_des, constants)
                 if robot.LONG_SLIP_COMPENSATION == 'EXP':
                     robot.qd_des, robot.beta_l_control, robot.beta_r_control = robot.computeLongSlipCompensationExp(
-                        robot.ctrl_v, robot.ctrl_omega, robot.qd_des, constants)
+                        robot.ctrl_v, robot.ctrl_omega, robot.qd_des, constants, conf.exp_params[fc])
 
             # # note there is only a ros_impedance controller, not a joint_group_vel controller, so I can only set velocity by integrating the wheel speed and
             # # senting it to be tracked from the impedance loop
@@ -782,7 +783,8 @@ def talker(n_robots, robots, trajectory, groundMap, data_path, traj_t_tot):
                 robot.q_des, robot.qd_des, robot.tau_ffwd)
 
             # save data with low freq
-            if time_global % 0.5 == 0 and time_global > 1:
+            if (time_global - robot.last_log_time) >= 0.1 and time_global > 3:
+                # print("robot ",robot.robot_name,":",time_global)
                 observation = pd.DataFrame({
                     'wheel_l': [wheel_l],
                     'wheel_r': [wheel_r],
@@ -792,6 +794,7 @@ def talker(n_robots, robots, trajectory, groundMap, data_path, traj_t_tot):
                     'i': [i],
                     'j': [j],
                 })
+                robot.last_log_time = time_global  
 
                 robot.data = pd.concat(
                     [robot.data, observation], ignore_index=True)
@@ -807,8 +810,8 @@ def talker(n_robots, robots, trajectory, groundMap, data_path, traj_t_tot):
         # wait for synconization of the control loop
         rate.sleep()
         # to avoid issues of dt 0.0009999
-        time_global = np.round(
-            time_global + np.array([conf.global_dt]), 3)
+        time_global += conf.global_dt
+        time_global = round(time_global,2)
 
         if time_global > smoothing_period:
             smoothing_factor = 1.
@@ -835,7 +838,7 @@ def talker(n_robots, robots, trajectory, groundMap, data_path, traj_t_tot):
             for i, robot in enumerate(robots):
                 print(f"tractor{i} computing global wls...")
                 robot.map_slippage_global_wls.compute_wls_regressor(
-                        robot.global_msg, robot.robot_name)
+                    robot.global_msg, robot.robot_name)
 
         if time_global == 300:
             print("Ending simulation...")
