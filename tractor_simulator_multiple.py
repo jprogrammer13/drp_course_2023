@@ -62,7 +62,7 @@ class GenericSimulator(BaseController):
         # 'OPEN_LOOP' 'CLOSED_LOOP_UNICYCLE' 'CLOSED_LOOP_SLIP_0'
         self.ControlType = 'CLOSED_LOOP_SLIP_0'
         self.SAVE_BAGS = False
-        self.LONG_SLIP_COMPENSATION = 'WLS'  # 'NN' 'NONE', "WLS"
+        self.LONG_SLIP_COMPENSATION = 'WLS'  # 'NN' 'NONE', "WLS", 'EXP
         self.DEBUG = False
         self.t_start = 0.0
         self.pose_init = None
