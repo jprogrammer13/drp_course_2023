@@ -10,6 +10,8 @@ class Model():
         self.degree = degree
 
     def predict(self, X):
+        # Safe clipping for estimator domain
+        X = np.clip(X, 0, 11)
         omega_l = X[0][None]
         omega_r = X[1][None]
 
@@ -18,9 +20,6 @@ class Model():
             X = np.column_stack((X, omega_l**d, omega_r**d))
 
         Y = X @ self.theta
-        # For safety if the input is out of range, return 0
-        if omega_l > 11 or omega_r > 11 or omega_l < 0 or omega_r < 0:
-            Y *= 0
 
         # add safe clipping in case of overhooting
         Y = np.clip(Y, -1, 1)
@@ -186,7 +185,6 @@ class MapSlippageDistributedWLSEstimator():
             beta_hat_wls_global = np.linalg.inv(sum_F_next) @ sum_a_next
             beta_hat_wls_global = beta_hat_wls_global.reshape(3, -1).T
         return beta_hat_wls_global
-
 
     def compute_wls_regressor(self, msgs, robot_name):
         for i in range(self.width):
