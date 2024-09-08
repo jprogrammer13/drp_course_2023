@@ -55,7 +55,6 @@ class LoopTrajectory:
         # v_dot = np.linalg.norm(b_vel_dot_xy)
         v_dot = b_vel_dot_xy[0]
 
-        # TODO
         omega_dot = 0.
 
         return np.squeeze(x), np.squeeze(y), np.squeeze(theta), np.squeeze(v), np.squeeze(omega), np.squeeze(v_dot),np.squeeze(omega_dot)

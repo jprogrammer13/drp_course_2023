@@ -698,16 +698,6 @@ def talker(n_robots, robots, trajectory, groundMap, data_path, traj_t_tot):
     smoothing_factor = 0.
     smoothing_period = 3.
 
-    # previous traj
-    # vel_gen = VelocityGenerator(simulation_time=40., DT=conf.robot_params[robots[0].robot_name]['dt'])
-    # initial_des_x = 0.0
-    # initial_des_y = 0.0
-    # initial_des_theta = 0.0
-    # v_ol, omega_ol, v_dot_ol, omega_dot_ol, _ = vel_gen.velocity_mir_smooth(v_max_=0.1, omega_max_=0.3)
-    # robots[0].traj = Trajectory(ModelsList.UNICYCLE, initial_des_x, initial_des_y, initial_des_theta,
-    #                     DT=conf.robot_params[robots[0].robot_name]['dt'],  v=v_ol, omega=omega_ol, v_dot=v_dot_ol, omega_dot=omega_dot_ol)
-    # robots[0].traj.set_initial_time(start_time=time_global)
-
     # CLOSE loop control
     while not ros.is_shutdown():
 
@@ -774,8 +764,8 @@ def talker(n_robots, robots, trajectory, groundMap, data_path, traj_t_tot):
                     robot.qd_des, robot.beta_l_control, robot.beta_r_control = robot.computeLongSlipCompensationExp(
                         robot.ctrl_v, robot.ctrl_omega, robot.qd_des, constants, conf.exp_params[fc])
 
-            # # note there is only a ros_impedance controller, not a joint_group_vel controller, so I can only set velocity by integrating the wheel speed and
-            # # senting it to be tracked from the impedance loop
+            # note there is only a ros_impedance controller, not a joint_group_vel controller, so I can only set velocity by integrating the wheel speed and
+            # senting it to be tracked from the impedance loop
             robot.q_des = robot.q_des + robot.qd_des * \
                 conf.robot_params[robot.robot_name]['dt']
 
@@ -784,7 +774,7 @@ def talker(n_robots, robots, trajectory, groundMap, data_path, traj_t_tot):
 
             # save data with low freq
             if (time_global - robot.last_log_time) >= 0.1 and time_global > 3:
-                # print("robot ",robot.robot_name,":",time_global)
+                
                 observation = pd.DataFrame({
                     'wheel_l': [wheel_l],
                     'wheel_r': [wheel_r],
