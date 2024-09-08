@@ -863,17 +863,6 @@ if __name__ == '__main__':
     data_path = f"{os.environ.get('LOCOSIM_DIR')}/robot_control/drp_course_2023/data"
     # Enable interactive mode
     groundMap = GroundMap(9, 9, 3)
-    # groundMap = GroundMap(6, 6)
-
-    # traj_viapoints = np.array([[-4.,  0.5],
-    #                            [-1.5, -3.],
-    #                            [0., -4.],
-    #                            [2., -3.],
-    #                            [4.,  0.5],
-    #                            [3.,  3.],
-    #                            [1.5,  4.],
-    #                            [0.,  2.9],
-    #                            [-2.,  2.5]])
 
     traj_viapoints = np.array([[-4.,  1],
                                [-3.5,  -0.7],
@@ -922,7 +911,5 @@ if __name__ == '__main__':
 
     for tractor in tractors:
         tractor.deregister_node()
-        # if tractor.DEBUG:
-        #     tractor.plotData()
 
     tractors[0].plotData(data_path)
